@@ -4,7 +4,7 @@ const connection = mysql.createConnection({
   host: '192.168.30.50',
   user: 'dev',
   password: '@H0ndur@s#SQL@',
-  database: 'sistema_asistenciados',
+  database: 'pmsb',
   waitForConnections: true,
   connectionLimit: 10,
 });

@@ -1,9 +1,8 @@
 const db = require('../config/db');
 
-exports.getUsuarios = (req, res) => {
-  db.query('SELECT * FROM users_us', (err, results) => {
+exports.getCountries = (req, res) => {
+  db.query('SELECT * FROM countries_us', (err, results) => {
     if (err) return res.status(500).json({ error: err });
     res.json(results);
   });
 };
-
