@@ -15,6 +15,8 @@ const bloodtypeRoutes = require('./routes/bloodtype');
 const transportationRoutes = require('./routes/transportation');
 const usercompanyRoutes = require('./routes/usercompany');
 
+
+
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
@@ -36,6 +38,7 @@ app.use('/api/cities', citiesRoutes);
 app.use('/api/marital', maritalStatusRoutes);
 app.use('/api/educationLevel', educationLevelRoutes);
 app.use('/api/bloodtype', bloodtypeRoutes);
+app.use('/api/transportation', transportationRoutes);
 app.use('/api/usercompany', usercompanyRoutes);
 
 // Servidor HTTP
