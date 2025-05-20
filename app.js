@@ -14,6 +14,7 @@ const educationLevelRoutes = require('./routes/educationLevel');
 const bloodtypeRoutes = require('./routes/bloodtype');
 const transportationRoutes = require('./routes/transportation');
 const usercompanyRoutes = require('./routes/usercompany');
+const dataFormRoutes = require('./routes/dataForm');
 
 
 
@@ -40,6 +41,7 @@ app.use('/api/educationLevel', educationLevelRoutes);
 app.use('/api/bloodtype', bloodtypeRoutes);
 app.use('/api/transportation', transportationRoutes);
 app.use('/api/usercompany', usercompanyRoutes);
+app.use('/api/dataForm', dataFormRoutes);
 
 // Servidor HTTP
 const PORT = 3005;
