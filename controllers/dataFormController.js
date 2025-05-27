@@ -9,7 +9,7 @@ exports.getDataForm = async (req, res) => {
     const [states] = await db.query('SELECT * FROM states_emp');
     const [cities] = await db.query('SELECT * FROM cities_emp');
     const [sectors] = await db.query('SELECT * FROM sectors_emp');
-    const [suburbs] = await db.query('SELECT * FROM suburds_emp');
+    const [suburbs] = await db.query('SELECT * FROM suburbs_emp');
     const [sizes] = await db.query('SELECT * FROM sizes_emp');
     const [educationLevels] = await db.query('SELECT * FROM educationlevel_emp');
     const [gender] = await db.query('SELECT * FROM gender_emp');
