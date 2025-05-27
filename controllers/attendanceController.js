@@ -53,3 +53,6 @@ exports.getAttendance = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener datos de asistencia' });
   }
 };
+
+
+
