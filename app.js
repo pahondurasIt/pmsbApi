@@ -4,7 +4,7 @@ const express = require('express');
 const app = express();
 
 const usuariosRoutes = require('./routes/usuarios');
-const empleadosRoutes = require('./routes/empleados');
+const employeeRoutes = require('./routes/employee');
 const genderRoutes = require('./routes/gender');
 const countriesRoutes = require('./routes/countries');
 const statesRoutes = require('./routes/states');
@@ -15,6 +15,7 @@ const bloodtypeRoutes = require('./routes/bloodtype');
 const transportationRoutes = require('./routes/transportation');
 const usercompanyRoutes = require('./routes/usercompany');
 const dataFormRoutes = require('./routes/dataForm');
+const attendanceRoutes = require('./routes/attendance');
 
 
 
@@ -31,7 +32,7 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/usuarios', usuariosRoutes);
-app.use('/api/empleados', empleadosRoutes);
+app.use('/api/employee', employeeRoutes);
 app.use('/api/gender', genderRoutes);
 app.use('/api/countries', countriesRoutes);
 app.use('/api/states', statesRoutes);
@@ -42,6 +43,7 @@ app.use('/api/bloodtype', bloodtypeRoutes);
 app.use('/api/transportation', transportationRoutes);
 app.use('/api/usercompany', usercompanyRoutes);
 app.use('/api/dataForm', dataFormRoutes);
+app.use('/api/registros', attendanceRoutes);
 
 // Servidor HTTP
 const PORT = 3005;
