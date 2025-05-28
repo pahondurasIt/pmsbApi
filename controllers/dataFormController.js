@@ -16,8 +16,18 @@ exports.getDataForm = async (req, res) => {
     const [relativesType] = await db.query('SELECT * FROM relativestype_emp');
     const [divisions] = await db.query('SELECT * FROM division_emp');
     const [areas] = await db.query('SELECT * FROM area_emp');
-    const [departments] = await db.query('SELECT * FROM department_emp');
+    const [departments] = await db.query('SELECT * FROM department_emp');     
     const [jobs] = await db.query('SELECT * FROM jobs_emp');
+    const [contractType] = await db.query('SELECT * FROM contracttype_emp');
+    const [payrollType] = await db.query('SELECT * FROM payrolltype_emp');
+    const [shifts] = await db.query('SELECT * FROM shifts_emp');
+    const [supervisors] = await db.query(`
+      select e.employeeID, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto,
+            j.jobName from pmsb.employees_emp e
+            inner join pmsb.jobs_emp j on  e.jobID = j.jobID
+            where j.jobName like 'Supervisor%';
+            `);
+
 
     res.json({
       bloodTypes,
@@ -36,7 +46,10 @@ exports.getDataForm = async (req, res) => {
       areas,
       departments,
       jobs,
-
+      contractType,
+      payrollType,
+      shifts,
+      supervisors
     });
   } catch (error) {
     console.error(error);

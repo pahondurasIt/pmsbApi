@@ -2,19 +2,18 @@ const db = require('../config/db');
 
 exports.getEmployee = async (req, res) => {
   try {
-    const [employees] = await db.query(`
-        SELECT 
-          e.codeEmployee, concat(firstName," ",middleName," ",lastName ," ",secondLastName) nombreCompleto,
-          dep.departmentName, j.jobsName, e.incapacitated, 
-              shi.shiftName, e.isActive, e.docNumber
+    const [employees] = await db.query(
+      `SELECT 
+          e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber
         FROM employees_emp e
               inner join pmsb.division_emp di on di.divisionID = e.divisionID
               inner join pmsb.area_emp a on a.areaID = e.areaID
               inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
-              inner join pmsb.jobs_emp j on j.jobsID = e.jobID
-        ORDER BY e.employeeID asc;
-      `);
+              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+        ORDER BY e.employeeID asc;`
+    );
 
     res.json(employees);
   } catch (error) {
@@ -25,8 +24,70 @@ exports.getEmployee = async (req, res) => {
 
 exports.createEmployee = async (req, res) => {
   try {
-    //const [result] = await db.query('INSERT INTO employees_emp (username, password, rol, empleado_id) VALUES (?, ?)', [username, password, rol, empleado_id]);
-    console.log(req.body);
+    //console.log(req.body);
+    console.log(req.body.employee);
+    let camposAuditoria = [
+      '2025-05-27',
+      2,
+      null,
+      2
+    ];
+
+    const [result] = await db.query(
+      `INSERT INTO employees_emp (
+          codeEmployee,      
+          firstName,
+          middleName,
+          lastName,
+          secondLastName,
+          phoneNumber,
+          genderID,
+          docID,
+          docNumber,
+          photoUrl,
+          birthDate,
+          bloodTypeID,
+          cityID,
+          stateID,
+          sectorID,
+          suburbID,
+          address,
+          gabachSize,
+          shirtSize,
+          divisionID,
+          departmentID,
+          areaID,
+          jobID,
+          hireDate,
+          endDate,
+          isActive,
+          partnerName,
+          partnerage,
+          companyID,
+          contractTypeID,
+          payrollTypeID,
+          shiftID,
+          educationLevelID,
+          educationGrade,
+          transportTypeID,
+          maritalStatusID,
+          nationality,
+          requisition,
+          replacementRequition,
+          evaluationStep,
+          line,
+          incapacitated,
+          salary,
+          relatives,
+          createdDate,
+          createdBy,
+          updatedDate,
+          updatedBy
+          ) 
+      VALUES (?, ?)`,
+      [req.body.employee, camposAuditoria]
+    );
+    console.log(result);
 
     res.json("result");
   } catch (error) {
