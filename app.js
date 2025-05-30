@@ -16,7 +16,8 @@ const transportationRoutes = require('./routes/transportation');
 const usercompanyRoutes = require('./routes/usercompany');
 const dataFormRoutes = require('./routes/dataForm');
 const attendanceRoutes = require('./routes/attendance');
-const registrosRoutes = require('./routes/registros')
+const registrosRoutes = require('./routes/registros');
+const permissionRoutes = require('./routes/permission');
 
 
 
@@ -46,6 +47,7 @@ app.use('/api/usercompany', usercompanyRoutes);
 app.use('/api/dataForm', dataFormRoutes);
 app.use('/api/attendance' , attendanceRoutes);
 app.use('/api/registros', registrosRoutes);
+app.use('/api/permission', permissionRoutes);
 
 
 // Servidor HTTP
