@@ -2,12 +2,12 @@ const db = require('../config/db');
 const dayjs = require('dayjs');
 const { camposAuditoria } = require('../helpers/columnasAuditoria');
 
-
+// Obtener todos los empleados 
 exports.getEmployee = async (req, res) => {
   try {
     const [employees] = await db.query(
       `SELECT 
-          e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber
         FROM employees_emp e
               inner join pmsb.division_emp di on di.divisionID = e.divisionID
@@ -16,13 +16,63 @@ exports.getEmployee = async (req, res) => {
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
               inner join pmsb.jobs_emp j on j.jobID = e.jobID
               where e.companyID = 1
-        ORDER BY e.employeeID asc;`
+              ORDER BY e.employeeID asc;`
     );
 
     res.json(employees);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al obtener datos para el formulario de empleados' });
+    res.status(500).json({ message: 'Error al obtener datos de empleados' });
+  }
+};
+
+// Get para un solo empleado
+exports.getEmployeeByID = async (req, res) => {
+  try {
+    const [employee] = await db.query(
+      `
+      select 
+        e.employeeID, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto, 
+        e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl,
+        e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
+        e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
+        e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt,
+        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName,
+        e.companyID, com.companyName, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
+        e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName, 
+        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep,
+        concat(supervisor.firstName,' ',supervisor.middleName,' ',supervisor.lastName ,' ', supervisor.secondLastName) supervisorName,
+        e.incapacitated, e.salary, e.relatives, e.createdBy, e.createdDate, e.updatedBy, e.updatedDate
+      from pmsb.employees_emp e
+        inner join pmsb.gender_emp g on g.genderID = e.genderID
+        inner join pmsb.doctypes_emp d on d.docID = e.docID
+        inner join pmsb.bloodtype_emp b on b.bloodTypeID = e.bloodTypeID
+        inner join pmsb.states_emp st on st.stateID = e.stateID
+        inner join pmsb.cities_emp c on c.cityID = e.cityID 
+        inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
+        inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
+        inner join pmsb.sizes_emp sg on sg.sizeID = e.gabachSize
+        inner join pmsb.sizes_emp ssh on ssh.sizeID = e.shirtSize
+        inner join pmsb.division_emp di on di.divisionID = e.divisionID
+        inner join pmsb.area_emp a on a.areaID = e.areaID
+        inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+        inner join pmsb.jobs_emp j on j.jobID = e.jobID
+        inner join pmsb.companies_us com on com.companyID = e.companyID
+        inner join pmsb.contracttype_emp cont on cont.contractTypeID = e.contractTypeID
+        inner join pmsb.payrolltype_emp pay on pay.payrollTypeID = e.payrollTypeID
+        INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
+        inner join pmsb.educationlevel_emp el on el.educationLevelID = e.educationLevelID
+        INNER JOIN pmsb.transportation_emp t on t.transportTypeID = e.transportTypeID
+        INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID
+        left join pmsb.employeesupervisor sup on sup.employeeID = e.employeeID
+		LEFT JOIN pmsb.employees_emp supervisor ON supervisor.employeeID = sup.supervisorID
+      WHERE e.employeeID = ${req.params.id}`
+    );
+
+    res.status(201).json(...employee);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener dato del empleado' });
   }
 };
 
@@ -56,6 +106,19 @@ exports.createEmployee = async (req, res) => {
     await db.query(`UPDATE correlative SET lastUsed = ${correlative[0].lastUsed + 1}  WHERE (correlativeID = 1)`);
 
     const employeeID = result.insertId;
+
+    if (req.body.supervisorEmp !== '') {
+      await db.query(
+        `INSERT INTO employeesupervisor (
+            employeeID,
+            supervisorID,
+            createdDate,
+            createdBy,
+            updatedDate,
+            updatedBy
+          ) VALUES (?, ?, ?)`, [employeeID, req.body.supervisorEmp, camposAuditoria]);
+
+    }
 
     req.body.childrenList.forEach(async x => {
       await db.query(
@@ -155,8 +218,24 @@ exports.createEmployee = async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName, x.percentage,
       x.relativesTypeID, x.phone, employeeID, camposAuditoria]);
     });
+    console.log(result);
 
-    res.json(result);
+    const [employee] = await db.query(
+      `SELECT 
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber
+        FROM employees_emp e
+              inner join pmsb.division_emp di on di.divisionID = e.divisionID
+              inner join pmsb.area_emp a on a.areaID = e.areaID
+              inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
+              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+              where e.employeeID = ${employeeID}
+        ORDER BY e.employeeID asc;`
+    );
+
+
+    res.status(201).json(...employee);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al crear el usuario' });
