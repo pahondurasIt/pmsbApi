@@ -7,7 +7,7 @@ const timezone = require("dayjs/plugin/timezone");
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-// Función para obtener tipos de permisoparticipants y lista de empleados
+// Función para obtener tipos de permisos y lista de empleados
 exports.getPermissionData = async (req, res) => {
   try {
     const [permissionResults] = await db.query(
@@ -26,31 +26,32 @@ exports.getPermissionData = async (req, res) => {
   }
 };
 
-// Controlador para autorizar y registrar un permiso (AJUSTADO SEGÚN NUEVA PETICIÓN)
+// Controlador para autorizar y registrar un permiso
+// ACTUALIZADO: Ahora recibe y guarda los campos de hora exitTimePermission y entryTimePermission
 exports.authorizePermission = async (req, res) => {
   try {
-    // 1. Extraer datos del frontend (solo necesitamos employeeID y permissionType)
-    const { employeeID, permissionType } = req.body;
+    // Extraemos también los nuevos campos de hora del cuerpo de la solicitud
+    const { employeeID, permissionType, exitTimePermission, entryTimePermission } = req.body;
 
-    // 2. Validar datos esenciales
-    if (!employeeID || !permissionType) {
+    // Validación actualizada para incluir los nuevos campos obligatorios
+    if (!employeeID || !permissionType || !exitTimePermission || !entryTimePermission) {
       return res.status(400).json({
         success: false,
-        message:
-          "Datos incompletos. Se requiere ID de empleado y tipo de permiso.",
+        message: "Datos incompletos. Se requiere ID de empleado, tipo de permiso, hora de salida y hora de entrada.",
       });
     }
 
-    // 3. Obtener fecha actual
     const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
     const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
 
-    // 4. Preparar la consulta SQL INSERT con los campos específicos solicitados
+    // Query actualizado para incluir los nuevos campos de hora
     const query = `
       INSERT INTO permissionattendance_emp (
         employeeID, 
         permissionTypeID, 
         date, 
+        exitTimePermission,
+        entryTimePermission,
         comment, 
         isPaid, 
         isApproved, 
@@ -59,39 +60,35 @@ exports.authorizePermission = async (req, res) => {
         updatedDate, 
         updatedBy
       ) 
-      VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, NULL, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NULL, ?)
     `;
-    // NOW() para createdDate, NULL para comment y updatedDate
-    // exitPermission y entryPermission no se incluyen, serán NULL por defecto
 
-    // 5. Definir los valores para la inserción según lo especificado
-    const commentValue = null; // Comentario es NULL
-    const isPaidValue = 0;     // isPaid es 0
-    const isApprovedValue = 1; // isApproved es 1 (autorizado)
-    const createdByValue = 1;  // createdBy es 1
-    const updatedByValue = 1;  // updatedBy es 1
+    const commentValue = null;
+    const isPaidValue = 0;
+    const isApprovedValue = 1;
+    const createdByValue = 1;
+    const updatedByValue = 1;
 
+    // Array de valores actualizado para incluir los nuevos campos de hora
     const values = [
       employeeID,
       permissionType,
       currentDateOnly,
-      commentValue,       // NULL
-      isPaidValue,        // 0
-      isApprovedValue,    // 1
-      // createdDate se inserta con NOW()
-      createdByValue,     // 1
-      // updatedDate se inserta como NULL
-      updatedByValue,     // 1
+      exitTimePermission,     // NUEVO: Hora de salida
+      entryTimePermission,    // NUEVO: Hora de entrada de regreso
+      commentValue,
+      isPaidValue,
+      isApprovedValue,
+      createdByValue,
+      updatedByValue,
     ];
 
-    // 6. Ejecutar la consulta
     const [result] = await db.query(query, values);
 
-    // 7. Verificar y responder
     if (result.affectedRows === 1) {
       const insertedId = result.insertId;
       console.log(
-        `Permiso autorizado y guardado con ID: ${insertedId} para empleado ${employeeID} en fecha ${currentDateOnly}`
+        `Permiso autorizado y guardado con ID: ${insertedId} para empleado ${employeeID} en fecha ${currentDateOnly} con hora de salida ${exitTimePermission} y hora de entrada ${entryTimePermission}`
       );
 
       res.status(201).json({
@@ -103,21 +100,19 @@ exports.authorizePermission = async (req, res) => {
           employeeID,
           permissionTypeID: permissionType,
           date: currentDateOnly,
+          exitTimePermission,     // NUEVO: Incluimos la hora de salida en la respuesta
+          entryTimePermission,    // NUEVO: Incluimos la hora de entrada en la respuesta
           isApproved: isApprovedValue,
         },
       });
     } else {
-      throw new Error(
-        "No se pudo guardar el registro del permiso en la base de datos."
-      );
+      throw new Error("No se pudo guardar el registro del permiso en la base de datos.");
     }
   } catch (error) {
-    // 8. Manejo de errores
     console.error("Error en authorizePermission:", error);
     res.status(500).json({
       success: false,
-      message:
-        "Ocurrió un error en el servidor al intentar autorizar el permiso.",
+      message: "Ocurrió un error en el servidor al intentar autorizar el permiso.",
       error: error.message,
     });
   }
