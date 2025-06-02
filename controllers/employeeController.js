@@ -32,7 +32,7 @@ exports.getEmployeeByID = async (req, res) => {
     const [employee] = await db.query(
       `
       select 
-        e.employeeID, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto, 
+        e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto, 
         e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl,
         e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
         e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
@@ -69,7 +69,56 @@ exports.getEmployeeByID = async (req, res) => {
       WHERE e.employeeID = ${req.params.id}`
     );
 
-    res.status(201).json(...employee);
+    const [children] = await db.query(`
+      select 
+	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+        f.birthdate, f.birthCert, g.genderName
+      from children_emp f
+        inner join gender_emp g on g.genderID = f.genderID
+      where f.employeeID = ${req.params.id};
+      `);
+
+    const [familyInformation] = await db.query(`
+      select 
+          concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+          f.age, r.relativesTypeDesc
+      from familyinformation_emp f
+      inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
+      where f.employeeID = ${req.params.id};
+      `);
+
+    const [econtact] = await db.query(`
+      select 
+          concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) nombreCompleto,
+          e.phoneNumber, r.relativesTypeDesc, 
+          concat(st.stateName, ', ', c.cityName, ', ', se.sectorName, ', ', su.suburbName) direccion
+      from econtacts_emp e
+          inner join pmsb.relativestype_emp r on r.relativesTypeID = e.relativesTypeID
+          inner join pmsb.states_emp st on st.stateID = e.stateID
+          inner join pmsb.cities_emp c on c.cityID = e.cityID 
+          inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
+          inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
+      where e.employeeID = ${req.params.id};
+      `);
+
+    const [beneficiaries] = await db.query(`
+      select 
+	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+        f.percentage, r.relativesTypeDesc, f.phone
+      from beneficiaries_emp f
+        inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
+      where f.employeeID = ${req.params.id};
+      `);
+
+
+
+    res.status(201).json({
+      employee,
+      children,
+      familyInformation,
+      econtact,
+      beneficiaries
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener dato del empleado' });
@@ -144,7 +193,7 @@ exports.createEmployee = async (req, res) => {
       await db.query(
         `INSERT INTO familyinformation_emp (
             relativesTypeID,
-            fistName,
+            firstName,
             middleName,
             lastName,
             secondLastName,
@@ -218,7 +267,6 @@ exports.createEmployee = async (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName, x.percentage,
       x.relativesTypeID, x.phone, employeeID, camposAuditoria]);
     });
-    console.log(result);
 
     const [employee] = await db.query(
       `SELECT 
