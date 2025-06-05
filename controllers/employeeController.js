@@ -3,12 +3,13 @@ const dayjs = require('dayjs');
 const { camposAuditoria } = require('../helpers/columnasAuditoria');
 
 // Obtener todos los empleados 
-exports.getEmployee = async (req, res) => {
+exports.getEmployees = async (req, res) => {
   try {
     const [employees] = await db.query(
-      `SELECT 
+      `
+      SELECT 
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
-          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
               inner join pmsb.division_emp di on di.divisionID = e.divisionID
               inner join pmsb.area_emp a on a.areaID = e.areaID
@@ -16,7 +17,8 @@ exports.getEmployee = async (req, res) => {
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
               inner join pmsb.jobs_emp j on j.jobID = e.jobID
               where e.companyID = 1
-              ORDER BY e.employeeID asc;`
+              ORDER BY e.employeeID asc;
+      `
     );
 
     res.json(employees);
@@ -101,24 +103,54 @@ exports.getEmployeeByID = async (req, res) => {
       where e.employeeID = ${req.params.id};
       `);
 
+    const [auxrelative] = await db.query(`
+        select 
+          concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) nombreCompleto,
+          r.relativesTypeDesc
+        from auxrelative_emp au
+        inner join employees_emp e on e.employeeID = au.employeeID
+          inner join pmsb.relativestype_emp r on r.relativesTypeID = au.relativesTypeID
+        where au.newEmployee = ${req.params.id};
+      `);
+
     const [beneficiaries] = await db.query(`
       select 
 	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
-        f.percentage, r.relativesTypeDesc, f.phone
+        f.percentage, r.relativesTypeDesc, f.phoneNumber
       from beneficiaries_emp f
         inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
       where f.employeeID = ${req.params.id};
       `);
-
-
 
     res.status(201).json({
       employee,
       children,
       familyInformation,
       econtact,
+      auxrelative,
       beneficiaries
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener dato del empleado' });
+  }
+};
+
+// Get para buscar empleados
+exports.getEmployeeSearch = async (req, res) => {
+  try {
+    const { searchTerm } = req.params;
+    const [employee] = await db.query(
+      `SELECT * from
+        (SELECT e.employeeID, concat(e.codeEmployee, ' ', firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto
+       FROM pmsb.employees_emp e) as emp
+       WHERE emp.nombreCompleto like ? and e.isActive = 1
+       LIMIT 10;`,
+      [`%${searchTerm}%`]
+    );
+
+
+    res.status(201).send(employee);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener dato del empleado' });
@@ -176,7 +208,7 @@ exports.createEmployee = async (req, res) => {
             middleName,
             lastName,
             secondLastName,
-            birthdate,
+            birthDate,
             birthCert,
             genderID,
             employeeID,
@@ -186,7 +218,7 @@ exports.createEmployee = async (req, res) => {
             updatedBy        
             ) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? )`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
-      x.birthdate, x.birthCert, x.genderID, employeeID, camposAuditoria]);
+      x.birthDate, x.birthCert, x.genderID, employeeID, camposAuditoria]);
     });
 
     req.body.familyList.forEach(async x => {
@@ -244,7 +276,7 @@ exports.createEmployee = async (req, res) => {
             updatedDate,
             updatedBy       
             ) 
-        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, x.newEmployee, employeeID, camposAuditoria]);
+        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, employeeID, x.employeeID?.employeeID, camposAuditoria]);
       });
     }
 
@@ -257,7 +289,7 @@ exports.createEmployee = async (req, res) => {
             secondLastName,
             percentage,
             relativesTypeID,
-            phone,
+            phoneNumber,
             employeeID,
             createdDate,
             createdBy,
@@ -265,7 +297,7 @@ exports.createEmployee = async (req, res) => {
             updatedBy       
             ) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName, x.percentage,
-      x.relativesTypeID, x.phone, employeeID, camposAuditoria]);
+      x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoria]);
     });
 
     const [employee] = await db.query(
@@ -281,7 +313,6 @@ exports.createEmployee = async (req, res) => {
               where e.employeeID = ${employeeID}
         ORDER BY e.employeeID asc;`
     );
-
 
     res.status(201).json(...employee);
   } catch (error) {
