@@ -2,9 +2,13 @@ const express = require('express');
 const router = express.Router();
 const attendanceController = require('../controllers/attendanceController');
 
+// Ruta para obtener registros de asistencia
+router.get('/', attendanceController.getAttendance);
 
-router.get('/', attendanceController.getAttendance );
-// NUEVA RUTA UNIFICADA para registrar entrada o salida
+// Ruta unificada para registrar entrada o salida
 router.post('/register', attendanceController.registerAttendance);
+
+// Ruta para obtener registros de despacho
+router.post('/updatePermissionComment', attendanceController.updatePermissionComment);
 
 module.exports = router;
