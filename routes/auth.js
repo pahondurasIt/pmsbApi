@@ -1,18 +1,11 @@
+// auth.js (o routes/authRoutes.js, dependiendo de tu estructura)
 const express = require('express');
 const router = express.Router();
-const { register, login } = require('../controllers/authController');
-const { body } = require('express-validator');
+const authController = require('../controllers/authController'); // Ajusta la ruta si es necesario
 
-router.post('/register', [
-  body('nombre').notEmpty(),
-  body('email').isEmail(),
-  body('password').isLength({ min: 6 }),
-  body('tipo').isIn(['admin', 'usuario'])
-], register);
+// Ruta para el inicio de sesión
+router.post('/', authController.login);
 
-router.post('/login', [
-  body('email').isEmail(),
-  body('password').notEmpty()
-], login);
+// Puedes añadir otras rutas relacionadas con la autenticación aquí, como /register, /logout, etc.
 
 module.exports = router;
