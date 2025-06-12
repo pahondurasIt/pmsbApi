@@ -4,9 +4,29 @@ const employeeController = require('../controllers/employeeController');
 
 router.get('/', employeeController.getEmployees);
 router.post('/', employeeController.createEmployee);
-router.put('/:id', employeeController.updateEmployee);
-router.delete('/:id', employeeController.deleteEmployee);
-router.get('/employeeByID/:id', employeeController.getEmployeeByID);
+router.put('/:employeeID', employeeController.updateEmployee);
+router.delete('/:employeeID', employeeController.deleteEmployee);
+router.get('/employeeByID/:employeeID', employeeController.getEmployeeByID);
 router.get('/searchEmployee/:searchTerm', employeeController.getEmployeeSearch);
+//// Rutas para hijos ////
+router.post('/addChild/:employeeID', employeeController.addChild);
+router.put('/updateChild/:childrenID', employeeController.updateChild);
+router.delete('/deleteChild/:childrenID', employeeController.deleteChild);
+//// Rutas para informacion de familiares ////
+router.post('/addFamilyInfo/:employeeID', employeeController.addFamilyInfo);
+router.put('/updateFamilyInfo/:familyInfoID', employeeController.updateFamilyInfo);
+router.delete('/deleteFamilyInfo/:familyInfoID', employeeController.deleteFamilyInfo);
+//// Rutas para contactos de emergencia ////
+router.post('/addEContact/:employeeID', employeeController.addEContact);
+router.put('/updateEContact/:econtactID', employeeController.updateEContact);
+router.delete('/deleteEContact/:econtactID', employeeController.deleteEContact);
+// ////// Rutas para familiares dentro de la empresa ////
+// router.post('/addFamilyEmployee/:employeeID', employeeController.addFamilyEmployee);
+// router.put('/updateFamilyEmployee/:familyEmployeeID', employeeController.updateFamilyEmployee);
+// router.delete('/deleteFamilyEmployee/:familyEmployeeID', employeeController.deleteFamilyEmployee);
+// ////// Rutas para informacion de benefiarios //////
+// router.post('/addBeneficiaryInfo/:employeeID', employeeController.addBeneficiaryInfo);
+// router.put('/updateBeneficiaryInfo/:beneficiaryInfoID', employeeController.updateBeneficiaryInfo);
+// router.delete('/deleteBeneficiaryInfo/:beneficiaryInfoID', employeeController.deleteBeneficiaryInfo);
 
 module.exports = router;

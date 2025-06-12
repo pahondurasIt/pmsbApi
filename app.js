@@ -1,8 +1,12 @@
-// server.js
 const http = require('http');
 const express = require('express');
+const socketIO = require("socket.io");
 const app = express();
 
+let server = http.createServer(app);
+module.exports.io = socketIO(server);
+
+const usuariosRoutes = require('./routes/usuarios');
 const employeeRoutes = require('./routes/employee');
 const genderRoutes = require('./routes/gender');
 const countriesRoutes = require('./routes/countries');
@@ -21,6 +25,7 @@ const authRoutes = require('./routes/auth');
 
 
 
+const thermalPrinterRoutes = require('./routes/thermalPrinter');
 
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -45,16 +50,16 @@ app.use('/api/educationLevel', educationLevelRoutes);
 app.use('/api/bloodtype', bloodtypeRoutes);
 app.use('/api/transportation', transportationRoutes);
 app.use('/api/dataForm', dataFormRoutes);
-app.use('/api/attendance' , attendanceRoutes);
+app.use('/api/attendance', attendanceRoutes);
 app.use('/api/registros', registrosRoutes);
 app.use('/api/permission', permissionRoutes);
 app.use('/api/exportattendance', exportattendanceRoutes);
 app.use('/api/auth', authRoutes);
 
+app.use('/api/thermalPrinter', thermalPrinterRoutes);
 
 // Servidor HTTP
 const PORT = 3005;
-const server = http.createServer(app);
 
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);

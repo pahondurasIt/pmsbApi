@@ -1,13 +1,14 @@
 const db = require('../config/db');
 const dayjs = require('dayjs');
-const { camposAuditoria } = require('../helpers/columnasAuditoria');
+const { camposAuditoriaADD, camposAuditoriaUPDATE } = require('../helpers/columnasAuditoria');
+const { isValidNumber, isValidString } = require('../helpers/validator');
 
-// Obtener todos los empleados 
+// Obtener todos los empleados
 exports.getEmployees = async (req, res) => {
   try {
     const [employees] = await db.query(
       `
-      SELECT 
+      SELECT
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
@@ -31,26 +32,30 @@ exports.getEmployees = async (req, res) => {
 // Get para un solo empleado
 exports.getEmployeeByID = async (req, res) => {
   try {
+    let employeeID = req.params.employeeID;
+    if (!isValidNumber(employeeID)) {
+      return res.status(400).json({ message: 'ID de empleado no válido' });
+    }
+
     const [employee] = await db.query(
-      `
-      select 
-        e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto, 
+      `select
+        e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto,
         e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl,
         e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
         e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
         e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt,
         e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName,
         e.companyID, com.companyName, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
-        e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName, 
-        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep,
+        e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName,
+        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep, sup.empSupervisorID, sup.supervisorID,
         concat(supervisor.firstName,' ',supervisor.middleName,' ',supervisor.lastName ,' ', supervisor.secondLastName) supervisorName,
-        e.incapacitated, e.salary, e.relatives, e.createdBy, e.createdDate, e.updatedBy, e.updatedDate
+        e.incapacitated, e.salary, IF(e.relatives, true, false) relatives, e.createdBy, e.createdDate, e.updatedBy, e.updatedDate
       from pmsb.employees_emp e
         inner join pmsb.gender_emp g on g.genderID = e.genderID
         inner join pmsb.doctypes_emp d on d.docID = e.docID
         inner join pmsb.bloodtype_emp b on b.bloodTypeID = e.bloodTypeID
         inner join pmsb.states_emp st on st.stateID = e.stateID
-        inner join pmsb.cities_emp c on c.cityID = e.cityID 
+        inner join pmsb.cities_emp c on c.cityID = e.cityID
         inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
         inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
         inner join pmsb.sizes_emp sg on sg.sizeID = e.gabachSize
@@ -66,60 +71,66 @@ exports.getEmployeeByID = async (req, res) => {
         inner join pmsb.educationlevel_emp el on el.educationLevelID = e.educationLevelID
         INNER JOIN pmsb.transportation_emp t on t.transportTypeID = e.transportTypeID
         INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID
-        left join pmsb.employeesupervisor sup on sup.employeeID = e.employeeID
+        left join pmsb.employeesupervisor_emp sup on sup.employeeID = e.employeeID
 		LEFT JOIN pmsb.employees_emp supervisor ON supervisor.employeeID = sup.supervisorID
-      WHERE e.employeeID = ${req.params.id}`
+      WHERE e.employeeID = ${employeeID};`
     );
 
     const [children] = await db.query(`
-      select 
-	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
-        f.birthdate, f.birthCert, g.genderName
-      from children_emp f
-        inner join gender_emp g on g.genderID = f.genderID
-      where f.employeeID = ${req.params.id};
+        select
+            f.childrenID, f.firstName, f.middleName, f.lastName, f.secondLastName,
+            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+            f.birthDate, f.birthCert, g.genderName, g.genderID
+        from pmsb.children_emp f
+        inner join pmsb.gender_emp g on g.genderID = f.genderID
+        where f.employeeID = ${employeeID};
       `);
 
     const [familyInformation] = await db.query(`
-      select 
-          concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
-          f.age, r.relativesTypeDesc
-      from familyinformation_emp f
-      inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
-      where f.employeeID = ${req.params.id};
+          select
+          	f.familyInfoID, f.firstName, f.middleName, f.lastName, f.secondLastName,
+            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+            f.age, r.relativesTypeDesc, r.relativesTypeID
+          from pmsb.familyinformation_emp f
+          inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
+          where f.employeeID = ${employeeID};
       `);
 
     const [econtact] = await db.query(`
-      select 
+      select
+          e.econtactID, e.firstName, e.middleName, e.lastName, e.secondLastName,
           concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) nombreCompleto,
-          e.phoneNumber, r.relativesTypeDesc, 
-          concat(st.stateName, ', ', c.cityName, ', ', se.sectorName, ', ', su.suburbName) direccion
-      from econtacts_emp e
+          e.phoneNumber, r.relativesTypeDesc, r.relativesTypeID,
+          concat(st.stateName, ', ', c.cityName, ', ', se.sectorName, ', ', su.suburbName) direccion,
+          st.stateID, st.stateName, c.cityID, c.cityName, se.sectorID, se.sectorName, su.suburbID, su.suburbName
+      from pmsb.econtacts_emp e
           inner join pmsb.relativestype_emp r on r.relativesTypeID = e.relativesTypeID
           inner join pmsb.states_emp st on st.stateID = e.stateID
-          inner join pmsb.cities_emp c on c.cityID = e.cityID 
+          inner join pmsb.cities_emp c on c.cityID = e.cityID
           inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
           inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
-      where e.employeeID = ${req.params.id};
+      where e.employeeID = ${employeeID};
       `);
 
     const [auxrelative] = await db.query(`
-        select 
-          concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) nombreCompleto,
-          r.relativesTypeDesc
+        select
+          e.employeeID, e.firstName, e.middleName, e.lastName, e.secondLastName,
+          concat(e.codeEmployee,' - ', e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) 'employeeID.nombreCompleto',
+          r.relativesTypeDesc, r.relativesTypeID
         from auxrelative_emp au
         inner join employees_emp e on e.employeeID = au.employeeID
           inner join pmsb.relativestype_emp r on r.relativesTypeID = au.relativesTypeID
-        where au.newEmployee = ${req.params.id};
+        where au.newEmployee = ${employeeID};
       `);
 
     const [beneficiaries] = await db.query(`
-      select 
+      select
+	      f.employeeID, f.firstName,  f.middleName,  f.lastName,  f.secondLastName,
 	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
-        f.percentage, r.relativesTypeDesc, f.phoneNumber
+        f.percentage, r.relativesTypeDesc, f.relativesTypeID, f.phoneNumber
       from beneficiaries_emp f
         inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
-      where f.employeeID = ${req.params.id};
+      where f.employeeID = ${employeeID};
       `);
 
     res.status(201).json({
@@ -141,10 +152,10 @@ exports.getEmployeeSearch = async (req, res) => {
   try {
     const { searchTerm } = req.params;
     const [employee] = await db.query(
-      `SELECT * from
-        (SELECT e.employeeID, concat(e.codeEmployee, ' ', firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto
+      `SELECT employeeID, nombreCompleto from
+        (SELECT e.employeeID, concat(e.codeEmployee, ' - ', firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto, e.isActive
        FROM pmsb.employees_emp e) as emp
-       WHERE emp.nombreCompleto like ? and e.isActive = 1
+       WHERE emp.nombreCompleto like ? and emp.isActive = 1
        LIMIT 10;`,
       [`%${searchTerm}%`]
     );
@@ -160,6 +171,10 @@ exports.getEmployeeSearch = async (req, res) => {
 exports.createEmployee = async (req, res) => {
   try {
     const [correlative] = await db.query('SELECT lastUsed FROM pmsb.correlative where companyID = 1 and correlativeID = 1');
+    if (correlative.length === 0) {
+      return res.status(500).json({ message: 'Error al obtener el correlativo' });
+    }
+    console.log(req.body.employeeData);
 
     const [result] = await db.query(
       `INSERT INTO employees_emp (
@@ -173,31 +188,33 @@ exports.createEmployee = async (req, res) => {
       [correlative[0].lastUsed + 1, req.body.employeeData.firstName, req.body.employeeData.middleName,
       req.body.employeeData.lastName, req.body.employeeData.secondLastName, req.body.employeeData.phoneNumber,
       req.body.employeeData.genderID, req.body.employeeData.docID, req.body.employeeData.docNumber, req.body.employeeData.photoUrl,
-      req.body.employeeData.birthDate, req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID,
+      dayjs(req.body.employeeData.birthDate).format('YYYY-MM-DD'), req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID,
       req.body.employeeData.stateID.stateID, req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID,
       req.body.employeeData.address, req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID,
       req.body.employeeData.divisionID.divisionID, req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID,
-      req.body.employeeData.jobID.jobID, req.body.employeeData.hireDate, req.body.employeeData.endDate, req.body.employeeData.isActive,
-      req.body.employeeData.partnerName, req.body.employeeData.partnerage, req.body.employeeData.companyID,
-      req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID, req.body.employeeData.shiftID,
-      req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade, req.body.employeeData.transportTypeID,
-      req.body.employeeData.maritalStatusID, req.body.employeeData.nationality, req.body.employeeData.evaluationStep,
-      req.body.employeeData.incapacitated, req.body.employeeData.salary, req.body.employeeData.relatives, camposAuditoria]
+      req.body.employeeData.jobID.jobID, dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'),
+      isValidString(req.body.employeeData.endDate) ? isValidString(req.body.employeeData.endDate).format('YYYY-MM-DD') : null,
+      req.body.employeeData.isActive, req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
+      req.body.employeeData.companyID, req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID,
+      req.body.employeeData.shiftID, req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade,
+      req.body.employeeData.transportTypeID, req.body.employeeData.maritalStatusID, req.body.employeeData.nationality,
+      req.body.employeeData.evaluationStep, req.body.employeeData.incapacitated, req.body.employeeData.salary,
+      req.body.employeeData.relatives, camposAuditoriaADD]
     );
     await db.query(`UPDATE correlative SET lastUsed = ${correlative[0].lastUsed + 1}  WHERE (correlativeID = 1)`);
 
     const employeeID = result.insertId;
 
-    if (req.body.supervisorEmp !== '') {
+    if (isValidString(req.body.employeeData.supervisor?.supervisorName)) {
       await db.query(
-        `INSERT INTO employeesupervisor (
+        `INSERT INTO employeesupervisor_emp (
             employeeID,
             supervisorID,
             createdDate,
             createdBy,
             updatedDate,
             updatedBy
-          ) VALUES (?, ?, ?)`, [employeeID, req.body.supervisorEmp, camposAuditoria]);
+          ) VALUES (?, ?, ?)`, [employeeID, req.body.employeeData.supervisor?.supervisorID, camposAuditoriaADD]);
 
     }
 
@@ -215,10 +232,10 @@ exports.createEmployee = async (req, res) => {
             createdDate,
             createdBy,
             updatedDate,
-            updatedBy        
-            ) 
+            updatedBy
+            )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? )`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
-      x.birthDate, x.birthCert, x.genderID, employeeID, camposAuditoria]);
+      x.birthDate, x.birthCert, x.genderID, employeeID, camposAuditoriaADD]);
     });
 
     req.body.familyList.forEach(async x => {
@@ -234,10 +251,10 @@ exports.createEmployee = async (req, res) => {
             createdDate,
             createdBy,
             updatedDate,
-            updatedBy       
-            ) 
+            updatedBy
+            )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [x.relativesTypeID, x.firstName, x.middleName, x.lastName,
-      x.secondLastName, x.age, employeeID, camposAuditoria]);
+      x.secondLastName, x.age, employeeID, camposAuditoriaADD]);
     });
 
     req.body.emergencyList.forEach(async x => {
@@ -257,11 +274,11 @@ exports.createEmployee = async (req, res) => {
             createdDate,
             createdBy,
             updatedDate,
-            updatedBy      
-            ) 
+            updatedBy
+            )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
       x.stateID.stateID, x.cityID.cityID, x.sectorID.sectorID, x.suburbID.suburbID,
-      x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoria]);
+      x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoriaADD]);
     });
 
     if (req.body.employeeData.relatives) {
@@ -274,9 +291,9 @@ exports.createEmployee = async (req, res) => {
             createdDate,
             createdBy,
             updatedDate,
-            updatedBy       
-            ) 
-        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, employeeID, x.employeeID?.employeeID, camposAuditoria]);
+            updatedBy
+            )
+        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, employeeID, x.employeeID?.employeeID, camposAuditoriaADD]);
       });
     }
 
@@ -294,16 +311,16 @@ exports.createEmployee = async (req, res) => {
             createdDate,
             createdBy,
             updatedDate,
-            updatedBy       
-            ) 
+            updatedBy
+            )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName, x.percentage,
-      x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoria]);
+      x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoriaADD]);
     });
 
     const [employee] = await db.query(
-      `SELECT 
+      `SELECT
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
-          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
               inner join pmsb.division_emp di on di.divisionID = e.divisionID
               inner join pmsb.area_emp a on a.areaID = e.areaID
@@ -322,14 +339,89 @@ exports.createEmployee = async (req, res) => {
 };
 
 exports.updateEmployee = async (req, res) => {
-  const { id } = req.params;
-  const { username, password, rol, empleado_id } = req.body;
   try {
-    await db.query('UPDATE usuarios SET username = ?, password = ? WHERE id = ?', [username, password, rol, empleado_id]);
-    res.json({ message: 'Usuario actualizado' });
+    const { employeeID } = req.params;
+    //Actualizar datos del empleado
+    if (!isValidNumber(employeeID)) {
+      return res.status(400).json({ message: 'ID de empleado inválido' });
+    }
+    const [result] = await db.query(
+      `UPDATE employees_emp SET
+          firstName = ?, middleName = ?, lastName = ?,
+          secondLastName = ?, phoneNumber = ?, genderID = ?,
+          docID = ?, docNumber = ?, birthDate = ?,
+          bloodTypeID = ?, cityID = ?, stateID = ?,
+          sectorID = ?, suburbID = ?, address = ?,
+          gabachSize = ?, shirtSize = ?, divisionID = ?,
+          departmentID = ?, areaID = ?, jobID = ?,
+          hireDate = ?, partnerName = ?, partnerage = ?,
+          contractTypeID = ?, payrollTypeID = ?, shiftID = ?,
+          educationLevelID = ?, educationGrade = ?, transportTypeID = ?,
+          maritalStatusID = ?, nationality = ?, salary = ?,
+          relatives = ?, updatedDate = ?, updatedBy = ?
+      WHERE employeeID = ?`,
+      [req.body.employeeData.firstName, req.body.employeeData.middleName, req.body.employeeData.lastName,
+      req.body.employeeData.secondLastName, req.body.employeeData.phoneNumber, req.body.employeeData.genderID,
+      req.body.employeeData.docID, req.body.employeeData.docNumber, dayjs(req.body.employeeData.birthDate).format('YYYY-MM-DD'),
+      req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID, req.body.employeeData.stateID.stateID,
+      req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID, req.body.employeeData.address,
+      req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID, req.body.employeeData.divisionID.divisionID,
+      req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID, req.body.employeeData.jobID.jobID,
+      dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'), req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
+      req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID, req.body.employeeData.shiftID,
+      req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade, req.body.employeeData.transportTypeID,
+      req.body.employeeData.maritalStatusID, req.body.employeeData.nationality, req.body.employeeData.salary,
+      req.body.employeeData.relatives, ...camposAuditoriaUPDATE, employeeID]
+    );
+    //Actualizacion si tenia supervisor y se cambio
+    if (isValidNumber(req.body.employeeData.supervisor?.supervisorID) && isValidNumber(req.body.empSupervisorID)) {
+      //Actualizar supervisor
+      const [empSupervisor] = await db.query(
+        `UPDATE employeesupervisor_emp
+            SET
+               supervisorID = ?, updatedDate = ?, updatedBy = ?
+            WHERE empSupervisorID = ?`,
+        [req.body.employeeData.supervisor.supervisorID, ...camposAuditoriaUPDATE, req.body.empSupervisorID]
+      );
+    } else if (isValidNumber(req.body.employeeData.supervisor?.supervisorID) && !isValidNumber(req.body.empSupervisorID)) {
+      //Agregar supervisor
+      await db.query(
+        `INSERT INTO employeesupervisor_emp (
+            employeeID,
+            supervisorID,
+            createdDate,
+            createdBy,
+            updatedDate,
+            updatedBy
+          ) VALUES (?, ?, ?, ?, ?, ?)`, [employeeID, req.body.employeeData.supervisor.supervisorID, ...camposAuditoriaADD]);
+    } else if (!isValidNumber(req.body.employeeData.supervisor?.supervisorID) && isValidNumber(req.body.empSupervisorID)) {
+      //Eliminar supervisor
+      await db.query(
+        `DELETE FROM employeesupervisor_emp WHERE empSupervisorID = ?`, [req.body.empSupervisorID]
+      );
+    }
+
+    const [employee] = await db.query(
+      `SELECT
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
+        FROM employees_emp e
+              inner join pmsb.division_emp di on di.divisionID = e.divisionID
+              inner join pmsb.area_emp a on a.areaID = e.areaID
+              inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
+              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+              where e.employeeID = ${employeeID}
+        ORDER BY e.employeeID asc;`
+    );
+
+    //Agregar registro de historico del empleado
+    res.status(201).json(...employee);
+
+
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al actualizar el usuario' });
+    res.status(500).json({ message: 'Error' });
   }
 };
 
@@ -344,3 +436,182 @@ exports.deleteEmployee = async (req, res) => {
   }
 };
 
+////// HIJOS DE EMPLEADOS //////
+exports.addChild = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, birthDate, birthCert, genderID } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO children_emp (
+          firstName, middleName, lastName, secondLastName, birthDate, birthCert,
+          genderID, employeeID, createdDate, createdBy, updatedDate, updatedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName, secondLastName,
+      dayjs(birthDate).format('YYYY-MM-DD'), birthCert, genderID, req.params.employeeID, camposAuditoriaADD]
+    );
+    res.json({ childrenID: result.insertId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear el hijo' });
+  }
+}
+
+exports.updateChild = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, birthDate, birthCert, genderID } = req.body;
+  if (!isValidNumber(req.params.childrenID)) {
+    return res.status(500).json({ message: 'ID de hijo inválido' });
+  }
+  try {
+    //Actualizar
+    await db.query(
+      `UPDATE children_emp SET
+          firstName = ?,
+          middleName = ?,
+          lastName = ?,
+          secondLastName = ?,
+          birthDate = ?,
+          birthCert = ?,
+          genderID = ?,
+          updatedDate = ?,
+          updatedBy = ?
+        WHERE childrenID = ?`,
+      [firstName, middleName, lastName, secondLastName, dayjs(birthDate).format('YYYY-MM-DD'), birthCert,
+        genderID, ...camposAuditoriaUPDATE, req.params.childrenID]
+    );
+    res.json({ message: 'Hijo actualizado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar el hijo' });
+  }
+}
+
+exports.deleteChild = async (req, res) => {
+  const { childrenID } = req.params;
+  try {
+    await db.query('DELETE FROM children_emp WHERE childrenID = ?', [childrenID]);
+    res.json({ message: 'Hijo eliminado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar el hijo' });
+  }
+}
+
+///// INFORMACION FAMILIAR DE EMPLEADOS //////
+exports.addFamilyInfo = async (req, res) => {
+  const { relativesTypeID, firstName, middleName, lastName, secondLastName, age } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO familyinformation_emp (
+          relativesTypeID, firstName, middleName, lastName, secondLastName, age,
+          employeeID, createdDate, createdBy, updatedDate, updatedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [relativesTypeID, firstName, middleName,
+      lastName, secondLastName, age, req.params.employeeID, camposAuditoriaADD]
+    );
+    res.json({ familyInfoID: result.insertId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear la información familiar' });
+  }
+}
+
+exports.updateFamilyInfo = async (req, res) => {
+  const { relativesTypeID, firstName, middleName, lastName, secondLastName, age } = req.body;
+  if (!isValidNumber(req.params.familyInfoID)) {
+    return res.status(500).json({ message: 'ID de información familiar inválido' });
+  }
+  try {
+    //Actualizar
+    await db.query(
+      `UPDATE familyinformation_emp SET
+          relativesTypeID = ?,
+          firstName = ?,
+          middleName = ?,
+          lastName = ?,
+          secondLastName = ?,
+          age = ?,
+          updatedDate = ?,
+          updatedBy = ?
+        WHERE familyInfoID = ?`,
+      [relativesTypeID, firstName, middleName, lastName, secondLastName, age,
+        ...camposAuditoriaUPDATE, req.params.familyInfoID]
+    );
+    res.json({ message: 'Información familiar actualizada correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar la información familiar' });
+  }
+}
+
+exports.deleteFamilyInfo = async (req, res) => {
+  const { familyInfoID } = req.params;
+  if (!isValidNumber(familyInfoID)) {
+    return res.status(500).json({ message: 'ID de información familiar inválido' });
+  }
+  try {
+    await db.query('DELETE FROM familyinformation_emp WHERE familyInfoID = ?', [familyInfoID]);
+    res.json({ message: 'Información familiar eliminada correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar la información familiar' });
+  }
+}
+
+///// CONTACTOS DE EMERGENCIA //////
+exports.addEContact = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, stateID, cityID, sectorID, suburbID,
+    relativesTypeID, phoneNumber } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO econtacts_emp (
+          firstName, middleName, lastName, secondLastName, stateID, cityID,
+          sectorID, suburbID, relativesTypeID, phoneNumber,
+          employeeID, createdDate, createdBy, updatedDate, updatedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName,
+      secondLastName, stateID, cityID, sectorID, suburbID, relativesTypeID, phoneNumber,
+      req.params.employeeID, camposAuditoriaADD]
+    );
+    res.json({ econtactID: result.insertId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear el contacto de emergencia' });
+  }
+}
+
+exports.updateEContact = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, stateID, cityID, sectorID, suburbID,
+    relativesTypeID, phoneNumber } = req.body;
+
+  if (!isValidNumber(req.params.econtactID)) {
+    return res.status(500).json({ message: 'ID de contacto de emergencia inválido' });
+  }
+  try {
+    await db.query(
+      `UPDATE econtacts_emp SET
+          firstName = ?, middleName = ?, lastName = ?,
+          secondLastName = ?, stateID = ?, cityID = ?,
+          sectorID = ?, suburbID = ?, relativesTypeID = ?,
+          phoneNumber = ?, updatedDate = ?, updatedBy = ?
+        WHERE econtactID = ?`,
+      [firstName, middleName, lastName, secondLastName, stateID, cityID, sectorID,
+        suburbID, relativesTypeID, phoneNumber, ...camposAuditoriaUPDATE, req.params.econtactID]
+    );
+    res.json({ message: 'Contacto de emergencia actualizado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar el contacto de emergencia' });
+  }
+}
+exports.deleteEContact = async (req, res) => {
+  const { econtactID } = req.params;
+  if (!isValidNumber(econtactID)) {
+    return res.status(500).json({ message: 'ID de contacto de emergencia inválido' });
+  }
+  try {
+    await db.query('DELETE FROM econtacts_emp WHERE econtactID = ?', [econtactID]);
+    res.json({ message: 'Contacto de emergencia eliminado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar el contacto de emergencia' });
+  }
+}

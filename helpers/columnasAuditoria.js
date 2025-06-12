@@ -1,11 +1,16 @@
 const dayjs = require("dayjs");
 
-const camposAuditoria = [
+const camposAuditoriaADD = [
     dayjs().format('YYYY-MM-DD'),
     2,
     null,
     2
 ];
+const camposAuditoriaUPDATE = [
+    dayjs().format('YYYY-MM-DD'),
+    2
+];
 module.exports = {
-    camposAuditoria
+    camposAuditoriaADD,
+    camposAuditoriaUPDATE
 }

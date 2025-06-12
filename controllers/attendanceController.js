@@ -59,6 +59,7 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
       "UPDATE permissionattendance_emp SET exitPermission = ? WHERE permissionID = ?",
       [currentTime, permissionID]
     );
+
     return { success: result.affectedRows > 0 };
   } catch (error) {
     console.error("Error al registrar salida con permiso:", error);
@@ -81,6 +82,7 @@ async function updatePermissionRecordWithEntry(permissionID, currentTime) {
 
 // --- Controladores (getAttendance, updatePermissionComment) ---
 exports.getAttendance = async (req, res) => {
+  // ... (código sin cambios, se omite por brevedad) ...
   try {
     const { startDate, endDate, specificDate } = req.query;
 

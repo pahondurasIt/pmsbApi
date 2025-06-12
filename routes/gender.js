@@ -4,13 +4,4 @@ const genderController = require('../controllers/genderController');
 
 router.get('/', genderController.getGender);
 
-/* Agregar los demas metodos */
-
-/*
-
-
-
-
-*/
-
 module.exports = router;
