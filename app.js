@@ -6,7 +6,6 @@ const app = express();
 let server = http.createServer(app);
 module.exports.io = socketIO(server);
 
-const usuariosRoutes = require('./routes/usuarios');
 const employeeRoutes = require('./routes/employee');
 const genderRoutes = require('./routes/gender');
 const countriesRoutes = require('./routes/countries');
