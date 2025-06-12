@@ -56,6 +56,7 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
       "UPDATE permissionattendance_emp SET exitPermission = ? WHERE permissionID = ?",
       [currentTime, permissionID]
     );
+
     return { success: result.affectedRows > 0 };
   } catch (error) {
     console.error("Error al registrar salida con permiso:", error);
@@ -79,9 +80,9 @@ async function updatePermissionRecordWithEntry(permissionID, currentTime) {
 // --- Controladores (getAttendance, updatePermissionComment - Sin cambios) ---
 exports.getAttendance = async (req, res) => {
   // ... (código sin cambios, se omite por brevedad) ...
-   try {
+  try {
     const { startDate, endDate, specificDate } = req.query;
-    
+
     let attendanceQuery = `
       SELECT 
         h.hattendanceID,
@@ -95,7 +96,7 @@ exports.getAttendance = async (req, res) => {
       JOIN 
         employees_emp e ON h.employeeID = e.employeeID
     `;
-    
+
     const conditions = [];
     const values = [];
 
@@ -113,9 +114,9 @@ exports.getAttendance = async (req, res) => {
     attendanceQuery += " ORDER BY h.employeeID, h.date DESC";
 
     const [attendanceRows] = await db.query(attendanceQuery, values);
-    
+
     const processedRows = [];
-    
+
     for (const attendanceRecord of attendanceRows) {
       const permissionQuery = `
         SELECT 
@@ -133,9 +134,9 @@ exports.getAttendance = async (req, res) => {
           permissionID ASC
         LIMIT 5
       `;
-      
+
       const [permissionRows] = await db.query(permissionQuery, [
-        attendanceRecord.employeeID, 
+        attendanceRecord.employeeID,
         attendanceRecord.date
       ]);
 
@@ -155,9 +156,9 @@ exports.getAttendance = async (req, res) => {
         attendanceRecord.employeeID,
         attendanceRecord.date
       ]);
-      
+
       const processedRecord = { ...attendanceRecord };
-      
+
       permissionRows.forEach((permission, index) => {
         const permissionNumber = index + 1;
         if (permission.exitPermissionTime) {
@@ -177,10 +178,10 @@ exports.getAttendance = async (req, res) => {
         processedRecord.dispatchingTime = dispatchingRows[0].dispatchingTime;
         processedRecord.dispatchingComment = dispatchingRows[0].dispatchingComment;
       }
-      
+
       processedRows.push(processedRecord);
     }
-    
+
     res.status(200).json(processedRows);
   } catch (error) {
     console.error("Error fetching attendance data:", error);
@@ -191,25 +192,25 @@ exports.updatePermissionComment = async (req, res) => {
   // ... (código sin cambios, se omite por brevedad) ...
   try {
     const { permissionID, comment } = req.body;
-    
+
     if (!permissionID) {
       return res.status(400).json({ message: "El ID del permiso es requerido" });
     }
-    
+
     const query = `
       UPDATE permissionattendance_emp 
       SET comment = ?
       WHERE permissionID = ?
     `;
-    
+
     const [result] = await db.query(query, [comment, permissionID]);
-    
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Permiso no encontrado" });
     }
-    
-    return res.status(200).json({ 
-      success: true, 
+
+    return res.status(200).json({
+      success: true,
       message: "Comentario actualizado correctamente",
       permissionID,
       comment
@@ -235,10 +236,10 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
     // *** NUEVA VALIDACIÓN: Verificar si hay permiso pendiente de regreso ANTES de permitir despacho ***
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
     if (pendingReturnStatus.hasPendingReturn) {
-        return res.status(400).json({
-            message: "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
-            employeeName, photoUrl
-        });
+      return res.status(400).json({
+        message: "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
+        employeeName, photoUrl
+      });
     }
     // Fin nueva validación
 
@@ -260,10 +261,10 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
       [employeeID, currentDateOnly]
     );
     if (attendanceRecordToUpdate.length === 0) {
-        return res.status(400).json({
-            message: "No se encontró un registro de entrada activo para marcar el despacho. Debes marcar tu entrada primero.",
-            employeeName, photoUrl
-        });
+      return res.status(400).json({
+        message: "No se encontró un registro de entrada activo para marcar el despacho. Debes marcar tu entrada primero.",
+        employeeName, photoUrl
+      });
     }
     const attendanceIDToUpdate = attendanceRecordToUpdate[0].hattendanceID;
 
@@ -273,7 +274,7 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
       VALUES (?, ?, ?, ?)
     `;
     const comment = 1; // Asumiendo 1 significa 'Cumplimiento de Meta'
-   
+
     const values = [employeeID, currentDateOnly, currentTimeSQL, comment];
     const [resultDispatch] = await db.query(insertDispatchQuery, values);
 
@@ -286,7 +287,7 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
     `;
     const [resultAttendanceUpdate] = await db.query(updateAttendanceQuery, [scheduledExitTimeSQL, attendanceIDToUpdate]);
     if (resultAttendanceUpdate.affectedRows === 0) {
-        console.error(`Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`);
+      console.error(`Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`);
     }
 
     return res.status(201).json({
@@ -344,60 +345,60 @@ exports.registerAttendance = async (req, res) => {
 
     // Chequeo inicial de estado finalizado (Salida o Despacho)
     const [finalizedCheck] = await db.query(
-        `SELECT h.exitTime, d.dispatchingID 
+      `SELECT h.exitTime, d.dispatchingID 
          FROM h_attendance_emp h 
          LEFT JOIN dispatching_emp d ON h.employeeID = d.employeeID AND DATE(h.date) = DATE(d.date)
          WHERE h.employeeID = ? AND DATE(h.date) = ? 
-         ORDER BY h.entryTime DESC LIMIT 1`, 
-        [employeeID, currentDateOnly]
+         ORDER BY h.entryTime DESC LIMIT 1`,
+      [employeeID, currentDateOnly]
     );
     if (finalizedCheck.length > 0 && (finalizedCheck[0].exitTime !== null || finalizedCheck[0].dispatchingID !== null)) {
-        return res.status(400).json({
-            message: "Ya has finalizado tu jornada laboral para hoy (Salida o Despacho registrado). No puedes realizar más marcajes.",
-            employeeName, photoUrl
-        });
+      return res.status(400).json({
+        message: "Ya has finalizado tu jornada laboral para hoy (Salida o Despacho registrado). No puedes realizar más marcajes.",
+        employeeName, photoUrl
+      });
     }
 
     // Verificar permiso pendiente de regreso (PRIORIDAD ALTA)
     // Si hay permiso pendiente, la única acción permitida es registrar el regreso (o manejar error si intenta otra cosa)
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
     if (pendingReturnStatus.hasPendingReturn) {
-        // Si intenta marcar DESPACHO mientras está fuera con permiso, la validación DENTRO de registerDispatchingInternal lo bloqueará.
-        // Si intenta marcar ENTRADA o SALIDA NORMAL mientras está fuera, también debe bloquearse.
-        if (operationMode === 'DESPACHO') {
-             // La validación se hará dentro de registerDispatchingInternal, pero podemos ponerla aquí también por claridad
-             return res.status(400).json({
-                message: "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
-                employeeName, photoUrl
-             });
-        } else if (operationMode !== 'permission_entry') { // Asumiendo que el regreso se marca con un modo específico o sin modo
-            // Lógica para manejar regreso de permiso (si la hora es válida)
-            const shiftStartTime = dayjs(`${currentDateOnly} ${shiftStartTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-            let shiftEndTime = dayjs(`${currentDateOnly} ${shiftEndTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-            if (shiftEndTime.isBefore(shiftStartTime)) shiftEndTime = shiftEndTime.add(1, 'day');
-            
-            if (!currentDateTimeCST.isAfter(shiftStartTime.subtract(1, 'hour')) || !currentDateTimeCST.isBefore(shiftEndTime.add(1, 'hour'))) {
-                return res.status(400).json({
-                    message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime.subtract(1, 'hour').format("h:mm A")} - ${shiftEndTime.add(1, 'hour').format("h:mm A")}).`,
-                    employeeName, photoUrl
-                });
-            }
-            const updateResult = await updatePermissionRecordWithEntry(pendingReturnStatus.permissionData.permissionID, currentTimeSQL);
-            if (!updateResult.success) {
-                throw new Error("No se pudo actualizar el registro de permiso para regreso: " + (updateResult.error || "Error desconocido"));
-            }
-            return res.status(201).json({
-                message: "Entrada de regreso con permiso registrada exitosamente", type: 'permission_entry',
-                time: currentTimeFormatted, employeeID, employeeName, photoUrl,
-                isPermissionEntry: true, permissionEntryTime: currentTimeFormatted
-            });
-        } else {
-             // Si intenta cualquier otra operación que no sea el regreso
-             return res.status(400).json({
-                message: "Debes registrar tu regreso del permiso antes de realizar cualquier otro marcaje.",
-                employeeName, photoUrl
-             });
+      // Si intenta marcar DESPACHO mientras está fuera con permiso, la validación DENTRO de registerDispatchingInternal lo bloqueará.
+      // Si intenta marcar ENTRADA o SALIDA NORMAL mientras está fuera, también debe bloquearse.
+      if (operationMode === 'DESPACHO') {
+        // La validación se hará dentro de registerDispatchingInternal, pero podemos ponerla aquí también por claridad
+        return res.status(400).json({
+          message: "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
+          employeeName, photoUrl
+        });
+      } else if (operationMode !== 'permission_entry') { // Asumiendo que el regreso se marca con un modo específico o sin modo
+        // Lógica para manejar regreso de permiso (si la hora es válida)
+        const shiftStartTime = dayjs(`${currentDateOnly} ${shiftStartTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
+        let shiftEndTime = dayjs(`${currentDateOnly} ${shiftEndTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
+        if (shiftEndTime.isBefore(shiftStartTime)) shiftEndTime = shiftEndTime.add(1, 'day');
+
+        if (!currentDateTimeCST.isAfter(shiftStartTime.subtract(1, 'hour')) || !currentDateTimeCST.isBefore(shiftEndTime.add(1, 'hour'))) {
+          return res.status(400).json({
+            message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime.subtract(1, 'hour').format("h:mm A")} - ${shiftEndTime.add(1, 'hour').format("h:mm A")}).`,
+            employeeName, photoUrl
+          });
         }
+        const updateResult = await updatePermissionRecordWithEntry(pendingReturnStatus.permissionData.permissionID, currentTimeSQL);
+        if (!updateResult.success) {
+          throw new Error("No se pudo actualizar el registro de permiso para regreso: " + (updateResult.error || "Error desconocido"));
+        }
+        return res.status(201).json({
+          message: "Entrada de regreso con permiso registrada exitosamente", type: 'permission_entry',
+          time: currentTimeFormatted, employeeID, employeeName, photoUrl,
+          isPermissionEntry: true, permissionEntryTime: currentTimeFormatted
+        });
+      } else {
+        // Si intenta cualquier otra operación que no sea el regreso
+        return res.status(400).json({
+          message: "Debes registrar tu regreso del permiso antes de realizar cualquier otro marcaje.",
+          employeeName, photoUrl
+        });
+      }
     }
     // Si llegamos aquí, NO hay permiso pendiente de regreso.
 
@@ -436,7 +437,7 @@ exports.registerAttendance = async (req, res) => {
 
     if (existingRecords.length === 0) {
       // --- CASO 1: PRIMERA ENTRADA DEL DÍA ---
-       if (!canMarkEntry) {
+      if (!canMarkEntry) {
         return res.status(400).json({
           message: `No se puede registrar entrada fuera del horario permitido (${entryWindowStart.format("h:mm A")} - ${shiftEndTime.format("h:mm A")}).`,
           employeeName, photoUrl
@@ -450,47 +451,47 @@ exports.registerAttendance = async (req, res) => {
 
     } else {
       // --- CASO 2: YA EXISTE REGISTRO HOY (sin exitTime, sin despacho, sin permiso pendiente) ---
-      const latestRecord = existingRecords[0]; 
+      const latestRecord = existingRecords[0];
 
       // --- CASO 2.1: YA MARCÓ ENTRADA, AÚN NO HA SALIDO ---
       if (!isAfterShiftEnd) { // Si aún no es la hora de fin de turno
-          const permissionStatus = await checkActivePermission(employeeID);
-          if (permissionStatus.hasActivePermission && !permissionStatus.hasExitedWithPermission) {
-              // --- CASO 2.1.1: SALIDA CON PERMISO (ANTES DE FIN DE TURNO) ---
-              isPermissionExit = true;
-              permissionExitTime = currentTimeFormatted;
-              const updateResult = await updatePermissionRecordWithExit(permissionStatus.permissionData.permissionID, currentTimeSQL);
-              if (!updateResult.success) {
-                  throw new Error("No se pudo actualizar el registro de permiso para salida: " + (updateResult.error || "Error desconocido"));
-              }
-              registrationType = 'permission_exit';
-              responseMessage = "Salida con permiso registrada exitosamente";
-              attendanceID = latestRecord.hattendanceID;
-          } else {
-              // --- CASO 2.1.2: INTENTO DE MARCAR DE NUEVO (SIN PERMISO Y ANTES DE FIN DE TURNO) ---
-              return res.status(400).json({
-                  message: `Ya has registrado tu entrada hoy. Solo puedes registrar tu salida normal después de las ${shiftEndTime.format("h:mm A")} o una salida con permiso si está aprobada.`,
-                  employeeName, photoUrl
-              });
+        const permissionStatus = await checkActivePermission(employeeID);
+        if (permissionStatus.hasActivePermission && !permissionStatus.hasExitedWithPermission) {
+          // --- CASO 2.1.1: SALIDA CON PERMISO (ANTES DE FIN DE TURNO) ---
+          isPermissionExit = true;
+          permissionExitTime = currentTimeFormatted;
+          const updateResult = await updatePermissionRecordWithExit(permissionStatus.permissionData.permissionID, currentTimeSQL);
+          if (!updateResult.success) {
+            throw new Error("No se pudo actualizar el registro de permiso para salida: " + (updateResult.error || "Error desconocido"));
           }
+          registrationType = 'permission_exit';
+          responseMessage = "Salida con permiso registrada exitosamente";
+          attendanceID = latestRecord.hattendanceID;
+        } else {
+          // --- CASO 2.1.2: INTENTO DE MARCAR DE NUEVO (SIN PERMISO Y ANTES DE FIN DE TURNO) ---
+          return res.status(400).json({
+            message: `Ya has registrado tu entrada hoy. Solo puedes registrar tu salida normal después de las ${shiftEndTime.format("h:mm A")} o una salida con permiso si está aprobada.`,
+            employeeName, photoUrl
+          });
+        }
       } else {
-           // --- CASO 2.1.3: YA ES HORA DE SALIDA NORMAL (o posterior) ---
-           if (canMarkExit) { // Verificar si está dentro de la ventana de gracia de salida
-              const query = `UPDATE h_attendance_emp SET exitTime = ?, updatedBy = ? WHERE hattendanceID = ?`;
-              const [result] = await db.query(query, [currentTimeSQL, "1", latestRecord.hattendanceID]);
-              if (result.affectedRows === 0) {
-                  throw new Error("No se pudo actualizar el registro de asistencia para salida.");
-              }
-              registrationType = 'exit';
-              responseMessage = "Salida registrada exitosamente";
-              attendanceID = latestRecord.hattendanceID;
-           } else {
-               // --- CASO 2.1.4: INTENTO DE SALIDA FUERA DE VENTANA DE GRACIA ---
-               return res.status(400).json({
-                  message: `No se puede registrar salida fuera del horario permitido (${exitWindowStart.format("h:mm A")} - ${exitWindowEnd.format("h:mm A")}).`,
-                  employeeName, photoUrl
-               });
-           }
+        // --- CASO 2.1.3: YA ES HORA DE SALIDA NORMAL (o posterior) ---
+        if (canMarkExit) { // Verificar si está dentro de la ventana de gracia de salida
+          const query = `UPDATE h_attendance_emp SET exitTime = ?, updatedBy = ? WHERE hattendanceID = ?`;
+          const [result] = await db.query(query, [currentTimeSQL, "1", latestRecord.hattendanceID]);
+          if (result.affectedRows === 0) {
+            throw new Error("No se pudo actualizar el registro de asistencia para salida.");
+          }
+          registrationType = 'exit';
+          responseMessage = "Salida registrada exitosamente";
+          attendanceID = latestRecord.hattendanceID;
+        } else {
+          // --- CASO 2.1.4: INTENTO DE SALIDA FUERA DE VENTANA DE GRACIA ---
+          return res.status(400).json({
+            message: `No se puede registrar salida fuera del horario permitido (${exitWindowStart.format("h:mm A")} - ${exitWindowEnd.format("h:mm A")}).`,
+            employeeName, photoUrl
+          });
+        }
       }
     }
 
@@ -510,7 +511,7 @@ exports.registerAttendance = async (req, res) => {
       employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName ? " " + employeeRecords[0].middleName : ""} ${employeeRecords[0].lastName}`,
       photoUrl: employeeRecords[0].photoUrl || ""
     } : {};
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error interno del servidor al registrar la asistencia.",
       ...employeeInfoForError
     });
