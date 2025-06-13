@@ -1,7 +1,32 @@
 const db = require('../config/db');
 const dayjs = require('dayjs');
+const multer = require('multer');
+const fs = require('fs'); // 👈 esta línea es obligatoria
+const path = require('path');
 const { camposAuditoriaADD, camposAuditoriaUPDATE } = require('../helpers/columnasAuditoria');
 const { isValidNumber, isValidString } = require('../helpers/validator');
+
+// Configuración de almacenamiento con nombre personalizado
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/EmpPht');
+  },
+  filename: (req, file, cb) => {
+    const employeeCode =  req.params.employeeID;
+    const ext = path.extname(file.originalname);
+    const filename = `${employeeCode}${ext}`;
+
+    // Elimina archivo existente con el mismo nombre si ya existe
+    const filePath = path.join('public/EmpPht', filename);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    cb(null, filename);
+  }
+});
+
+const upload = multer({ storage });
 
 // Obtener todos los empleados
 exports.getEmployees = async (req, res) => {
@@ -114,8 +139,8 @@ exports.getEmployeeByID = async (req, res) => {
 
     const [auxrelative] = await db.query(`
         select
-          e.employeeID, e.firstName, e.middleName, e.lastName, e.secondLastName,
-          concat(e.codeEmployee,' - ', e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) 'employeeID.nombreCompleto',
+          au.auxRelativeID, e.employeeID, e.firstName, e.middleName, e.lastName, e.secondLastName, au.newEmployee,
+          concat(e.codeEmployee,' - ', e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) completeName,
           r.relativesTypeDesc, r.relativesTypeID
         from auxrelative_emp au
         inner join employees_emp e on e.employeeID = au.employeeID
@@ -125,8 +150,8 @@ exports.getEmployeeByID = async (req, res) => {
 
     const [beneficiaries] = await db.query(`
       select
-	      f.employeeID, f.firstName,  f.middleName,  f.lastName,  f.secondLastName,
-	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+	      f.beneficiaryID, f.employeeID, f.firstName,  f.middleName,  f.lastName,  f.secondLastName,
+	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) completeName,
         f.percentage, r.relativesTypeDesc, f.relativesTypeID, f.phoneNumber
       from beneficiaries_emp f
         inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
@@ -152,10 +177,10 @@ exports.getEmployeeSearch = async (req, res) => {
   try {
     const { searchTerm } = req.params;
     const [employee] = await db.query(
-      `SELECT employeeID, nombreCompleto from
-        (SELECT e.employeeID, concat(e.codeEmployee, ' - ', firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto, e.isActive
+      `SELECT employeeID, completeName from
+        (SELECT e.employeeID, concat(e.codeEmployee, ' - ', firstName, " ", middleName, " ", lastName, " ", secondLastName) completeName, e.isActive
        FROM pmsb.employees_emp e) as emp
-       WHERE emp.nombreCompleto like ? and emp.isActive = 1
+       WHERE emp.completeName like ? and emp.isActive = 1
        LIMIT 10;`,
       [`%${searchTerm}%`]
     );
@@ -436,6 +461,27 @@ exports.deleteEmployee = async (req, res) => {
   }
 };
 
+exports.uploadPhoto = (req, res) => {
+  upload.single('image')(req, res, async (err) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Error al subir la foto' });
+    }
+
+    // Guardar la ruta de la foto en la base de datos
+    const photoPath = req.file.path;
+    const employeeID = req.params.employeeID;
+
+    try {
+      await db.query('UPDATE employees_emp SET photoUrl = ? WHERE employeeID = ?', [photoPath, employeeID]);
+      res.json({ message: 'Foto subida correctamente' });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error al guardar la foto en la base de datos' });
+    }
+  });
+};
+
 ////// HIJOS DE EMPLEADOS //////
 exports.addChild = async (req, res) => {
   const { firstName, middleName, lastName, secondLastName, birthDate, birthCert, genderID } = req.body;
@@ -613,5 +659,130 @@ exports.deleteEContact = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al eliminar el contacto de emergencia' });
+  }
+}
+
+///// AUXILIARES DE EMPLEADOS //////
+exports.addAuxRelative = async (req, res) => {
+  const { relativesTypeID, employeeID } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO auxrelative_emp (
+          relativesTypeID, newEmployee, employeeID,
+          createdDate, createdBy, updatedDate, updatedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+      relativesTypeID, parseInt(req.params.employeeID), employeeID,
+      ...camposAuditoriaADD
+    ]
+    );
+    res.json({ auxRelativeID: result.insertId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear el familiar auxiliar' });
+  }
+}
+exports.updateAuxRelative = async (req, res) => {
+  const { relativesTypeID, employeeID } = req.body;
+
+  if (!isValidNumber(req.params.auxRelativeID)) {
+    return res.status(500).json({ message: 'ID de familiar auxiliar inválido' });
+  }
+  try {
+    await db.query(
+      `UPDATE auxrelative_emp SET
+          relativesTypeID = ?, employeeID = ?,
+          updatedDate = ?, updatedBy = ?
+        WHERE auxRelativeID = ?`,
+      [relativesTypeID, employeeID, ...camposAuditoriaUPDATE, req.params.auxRelativeID]
+    );
+    res.json({ message: 'Familiar auxiliar actualizado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar el familiar auxiliar' });
+  }
+}
+exports.deleteAuxRelative = async (req, res) => {
+  const { auxRelativeID } = req.params;
+  if (!isValidNumber(auxRelativeID)) {
+    return res.status(500).json({ message: 'ID de familiar auxiliar inválido' });
+  }
+  try {
+    await db.query('DELETE FROM auxrelative_emp WHERE auxRelativeID = ?', [auxRelativeID]);
+    res.json({ message: 'Familiar auxiliar eliminado correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar el familiar auxiliar' });
+  }
+}
+//Eliminar varios familiares auxiliares
+exports.deleteAuxRelativeByEmployee = async (req, res) => {
+  const { employeeID } = req.params;
+  if (!isValidNumber(employeeID)) {
+    return res.status(500).json({ message: 'ID de empleado inválido' });
+  }
+  try {
+    await db.query('DELETE FROM auxrelative_emp WHERE newEmployee = ?', [employeeID]);
+    res.json({ message: 'Familiares auxiliares eliminados correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar los familiares auxiliares' });
+  }
+}
+///// INFORMACION DE BENEFICIARIOS //////
+exports.addBeneficiaryInfo = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, percentage, relativesTypeID, phoneNumber } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO beneficiaries_emp (
+          firstName, middleName, lastName, secondLastName, percentage,
+          relativesTypeID, phoneNumber, employeeID,
+          createdDate, createdBy, updatedDate, updatedBy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName,
+      secondLastName, percentage, relativesTypeID, phoneNumber,
+      req.params.employeeID, camposAuditoriaADD]
+    );
+    res.json({ beneficiaryID: result.insertId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear la información del beneficiario' });
+  }
+}
+exports.updateBeneficiaryInfo = async (req, res) => {
+  const { firstName, middleName, lastName, secondLastName, percentage, relativesTypeID, phoneNumber } = req.body;
+
+  console.log(req.body);
+
+  if (!isValidNumber(req.params.beneficiaryID)) {
+    return res.status(500).json({ message: 'ID de información del beneficiario inválido' });
+  }
+  try {
+    await db.query(
+      `UPDATE beneficiaries_emp SET
+          firstName = ?, middleName = ?, lastName = ?,
+          secondLastName = ?, percentage = ?, relativesTypeID = ?,
+          phoneNumber = ?, updatedDate = ?, updatedBy = ?
+        WHERE beneficiaryID = ?`,
+      [firstName, middleName, lastName, secondLastName, percentage,
+        relativesTypeID, phoneNumber, ...camposAuditoriaUPDATE, req.params.beneficiaryID]
+    );
+    res.json({ message: 'Información del beneficiario actualizada correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar la información del beneficiario' });
+  }
+}
+exports.deleteBeneficiaryInfo = async (req, res) => {
+  const { beneficiaryID } = req.params;
+  if (!isValidNumber(beneficiaryID)) {
+    return res.status(500).json({ message: 'ID de información del beneficiario inválido' });
+  }
+  try {
+    await db.query('DELETE FROM beneficiaries_emp WHERE beneficiaryID = ?', [beneficiaryID]);
+    res.json({ message: 'Información del beneficiario eliminada correctamente' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al eliminar la información del beneficiario' });
   }
 }

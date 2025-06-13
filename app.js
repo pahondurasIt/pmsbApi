@@ -2,6 +2,7 @@ const http = require('http');
 const express = require('express');
 const socketIO = require("socket.io");
 const app = express();
+const path = require('path');
 
 let server = http.createServer(app);
 module.exports.io = socketIO(server);
@@ -34,8 +35,9 @@ app.use(function (req, res, next) {
   next();
 });
 
-// Middlewares
-app.use(express.json());
+app.use(express.json({ limit: '10mb', extended: true })); // Para manejar JSON
+app.use('/api/EmpPht', express.static(path.join(__dirname, 'public/EmpPht')));
+
 
 // Rutas
 
