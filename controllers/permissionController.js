@@ -7,14 +7,19 @@ const timezone = require("dayjs/plugin/timezone");
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-// Función para obtener tipos de permisos y lista de empleados
+// Función para obtener tipos de permisos y lista de empleados que marcaron hoy
 exports.getPermissionData = async (req, res) => {
   try {
     const [permissionResults] = await db.query(
       "SELECT permissionTypeID, permissionTypeName FROM permissiontype_emp"
     );
+    const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
     const [employeeResults] = await db.query(
-      "SELECT employeeID, CONCAT(firstName, ' ', COALESCE(middleName, ''), ' ', lastName) as fullName FROM employees_emp"
+      `SELECT DISTINCT e.employeeID, CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) as fullName 
+       FROM employees_emp e
+       JOIN h_attendance_emp a ON e.employeeID = a.employeeID 
+       WHERE DATE(a.date) = ?`,
+      [currentDate]
     );
     res.json({ permissions: permissionResults, employees: employeeResults });
   } catch (err) {
