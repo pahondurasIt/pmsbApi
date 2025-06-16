@@ -12,7 +12,7 @@ const storage = multer.diskStorage({
     cb(null, 'public/EmpPht');
   },
   filename: (req, file, cb) => {
-    const employeeCode =  req.params.employeeID;
+    const employeeCode = req.params.employeeID;
     const ext = path.extname(file.originalname);
     const filename = `${employeeCode}${ext}`;
 
@@ -469,9 +469,8 @@ exports.uploadPhoto = (req, res) => {
     }
 
     // Guardar la ruta de la foto en la base de datos
-    const photoPath = req.file.path;
+    const photoPath = req.file.filename;
     const employeeID = req.params.employeeID;
-
     try {
       await db.query('UPDATE employees_emp SET photoUrl = ? WHERE employeeID = ?', [photoPath, employeeID]);
       res.json({ message: 'Foto subida correctamente' });

@@ -38,9 +38,7 @@ app.use(function (req, res, next) {
 app.use(express.json({ limit: '10mb', extended: true })); // Para manejar JSON
 app.use('/api/EmpPht', express.static(path.join(__dirname, 'public/EmpPht')));
 
-
 // Rutas
-
 app.use('/api/employee', employeeRoutes);
 app.use('/api/gender', genderRoutes);
 app.use('/api/countries', countriesRoutes);
@@ -60,7 +58,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/thermalPrinter', thermalPrinterRoutes);
 
 // Servidor HTTP
-const PORT = 3005;
+const PORT = 3006;
 
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
