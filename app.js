@@ -5,7 +5,15 @@ const app = express();
 const path = require('path');
 
 let server = http.createServer(app);
-module.exports.io = socketIO(server);
+const io = socketIO(server, {
+  cors: {
+    origin: "*", // Permitir todas las conexiones CORS
+    methods: ["GET", "POST"]
+  }
+});
+
+// Exportar la instancia de io para que pueda ser utilizada en otros módulos
+module.exports.io = io;
 
 const employeeRoutes = require('./routes/employee');
 const genderRoutes = require('./routes/gender');
@@ -22,6 +30,7 @@ const registrosRoutes = require('./routes/registros');
 const permissionRoutes = require('./routes/permission');
 const exportattendanceRoutes = require('./routes/exportattendance');
 const authRoutes = require('./routes/auth');
+
 
 
 
@@ -55,6 +64,7 @@ app.use('/api/permission', permissionRoutes);
 app.use('/api/exportattendance', exportattendanceRoutes);
 app.use('/api/auth', authRoutes);
 
+
 app.use('/api/thermalPrinter', thermalPrinterRoutes);
 
 // Servidor HTTP
@@ -63,3 +73,5 @@ const PORT = 3006;
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
+
+
