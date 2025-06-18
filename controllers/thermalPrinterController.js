@@ -33,7 +33,6 @@ exports.printTicketPermission = async (req, res) => {
             order by p.exitTimePermission desc
             limit 1;`
         );
-        console.log(...dataPermission);
 
         if (printerClients.length === 0) {
             return res
@@ -45,7 +44,6 @@ exports.printTicketPermission = async (req, res) => {
         printerClients.forEach((socket) => {
             socket.emit("printPermission", dataPermission);
         });
-        console.log("Solicitud de impresión enviada a clientes locales.");
         return res.status(200).send({ message: "Solicitud de impresión enviada." });
     } catch (error) {
         console.error("Error al imprimir permiso:", error);
@@ -55,9 +53,7 @@ exports.printTicketPermission = async (req, res) => {
 
 // Manejar conexión de clientes locales
 io.on("connection", (socket) => {
-    console.log("Cliente local conectado");
     printerClients.push(socket);
-
     socket.on("disconnect", () => {
         console.log("Cliente local desconectado");
         printerClients = printerClients.filter((client) => client !== socket);

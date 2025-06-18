@@ -15,7 +15,7 @@ exports.getPermissionData = async (req, res) => {
     );
     const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
     const [employeeResults] = await db.query(
-      `SELECT DISTINCT e.employeeID, CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) as fullName 
+      `SELECT DISTINCT e.employeeID, CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) as fullName 
        FROM employees_emp e
        JOIN h_attendance_emp a ON e.employeeID = a.employeeID 
        WHERE DATE(a.date) = ?`,
@@ -26,6 +26,34 @@ exports.getPermissionData = async (req, res) => {
     console.error("Error fetching permission data:", err);
     res.status(500).json({
       message: "Error al cargar datos iniciales para permisos",
+      error: err.message,
+    });
+  }
+};
+
+// Función para obtener todos los permisos registrados
+exports.getAllPermissions = async (req, res) => {
+  try {
+    const [results] = await db.query(`
+     SELECT 
+        CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), 
+        ' ', e.lastName,  ' ', e.secondLastName) as fullName,
+        e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
+        pa.date, pa.exitTimePermission, pa.entryTimePermission,
+        pa.exitPermission, pa.entryPermission, pa.IsApproved
+    FROM
+    pmsb.permissionattendance_emp pa
+            INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
+            INNER JOIN employees_emp e on e.employeeID = pa.employeeID
+            INNER JOIN jobs_emp j on e.jobID = j.jobID
+    where pa.date = DATE(NOW()) and IsApproved
+    ORDER BY pa.permissionID desc;
+    `);
+    res.json(results);
+  } catch (err) {
+    console.error("Error fetching all permissions:", err);
+    res.status(500).json({
+      message: "Error al cargar todos los permisos",
       error: err.message,
     });
   }
@@ -43,6 +71,22 @@ exports.authorizePermission = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Datos incompletos. Se requiere ID de empleado, tipo de permiso, hora de salida y hora de entrada.",
+      });
+    }
+
+    const [permissionResults] = await db.query(
+      `
+        SELECT * FROM pmsb.permissionattendance_emp pa
+          where pa.date = DATE(NOW()) and IsApproved
+          and pa.employeeID = ? and isnull(pa.exitPermission)
+        `,
+      [employeeID]
+    );
+
+    if (permissionResults.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Ya existe un permiso pendiente de autorización para este empleado.",
       });
     }
 
@@ -79,8 +123,8 @@ exports.authorizePermission = async (req, res) => {
       employeeID,
       permissionType,
       currentDateOnly,
-      exitTimePermission,     // NUEVO: Hora de salida
-      entryTimePermission,    // NUEVO: Hora de entrada de regreso
+      dayjs(exitTimePermission).format("HH:mm"),     // NUEVO: Hora de salida
+      dayjs(entryTimePermission).format("HH:mm"),    // NUEVO: Hora de entrada de regreso
       commentValue,
       isPaidValue,
       isApprovedValue,
@@ -92,23 +136,31 @@ exports.authorizePermission = async (req, res) => {
 
     if (result.affectedRows === 1) {
       const insertedId = result.insertId;
-      console.log(
-        `Permiso autorizado y guardado con ID: ${insertedId} para empleado ${employeeID} en fecha ${currentDateOnly} con hora de salida ${exitTimePermission} y hora de entrada ${entryTimePermission}`
+
+      const [permissionResults] = await db.query(
+        `
+        SELECT 
+            CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), 
+            ' ', e.lastName,  ' ', e.secondLastName) as fullName,
+            e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
+            pa.date, pa.exitTimePermission, pa.entryTimePermission,
+            pa.exitPermission, pa.entryPermission, pa.IsApproved
+          FROM
+          pmsb.permissionattendance_emp pa
+            INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
+            INNER JOIN employees_emp e on e.employeeID = pa.employeeID
+            INNER JOIN jobs_emp j on e.jobID = j.jobID
+          where pa.date = DATE(NOW()) and IsApproved
+          and pa.permissionID = ?
+        `,
+        [insertedId]
       );
 
       res.status(201).json({
         success: true,
         message: "Permiso autorizado y registrado correctamente.",
         permissionId: insertedId,
-        savedData: {
-          permissionID: insertedId,
-          employeeID,
-          permissionTypeID: permissionType,
-          date: currentDateOnly,
-          exitTimePermission,     // NUEVO: Incluimos la hora de salida en la respuesta
-          entryTimePermission,    // NUEVO: Incluimos la hora de entrada en la respuesta
-          isApproved: isApprovedValue,
-        },
+        savedData: permissionResults[0] || null,
       });
     } else {
       throw new Error("No se pudo guardar el registro del permiso en la base de datos.");
@@ -122,3 +174,4 @@ exports.authorizePermission = async (req, res) => {
     });
   }
 };
+
