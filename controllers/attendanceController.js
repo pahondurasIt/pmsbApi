@@ -4,6 +4,7 @@ const ExcelJS = require("exceljs"); // Librería para manejar Excel
 const utc = require("dayjs/plugin/utc"); // Plugin para manejar UTC
 const timezone = require("dayjs/plugin/timezone"); // Plugin para manejar zonas horarias
 const isoWeek = require("dayjs/plugin/isoWeek"); // Plugin para manejar semanas ISO
+const { io } = require('../app'); // Importar la instancia de Socket.IO
 
 // Extender dayjs con los plugins de UTC, Timezone e ISO Week
 dayjs.extend(utc);
@@ -12,7 +13,7 @@ dayjs.extend(isoWeek);
 
 // Función auxiliar para formatear la hora con AM/PM
 const formatTimeWithPeriod = (dayjsDate) => {
-  return dayjsDate.format("h:mm A"); // Formato h:mm AM/PM
+  return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
 };
 
 // --- Funciones Auxiliares (Permisos, etc. - Sin cambios relevantes aquí) ---
@@ -82,7 +83,6 @@ async function updatePermissionRecordWithEntry(permissionID, currentTime) {
 
 // --- Controladores (getAttendance, updatePermissionComment) ---
 exports.getAttendance = async (req, res) => {
-  // ... (código sin cambios, se omite por brevedad) ...
   try {
     const { startDate, endDate, specificDate } = req.query;
 
@@ -114,7 +114,8 @@ exports.getAttendance = async (req, res) => {
     if (conditions.length > 0) {
       attendanceQuery += " WHERE " + conditions.join(" AND ");
     }
-    attendanceQuery += " ORDER BY h.employeeID, h.date DESC";
+    // MODIFICATION: Sort by date (desc), then employeeID (asc), then entryTime (desc)
+    attendanceQuery += " ORDER BY h.employeeID ASC, h.entryTime ASC"; 
 
     const [attendanceRows] = await db.query(attendanceQuery, values);
 
@@ -293,6 +294,20 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
       console.error(`Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`);
     }
 
+    // Emitir evento Socket.IO para nuevo registro de despacho
+    const processedRecord = {
+      employeeID,
+      date: currentDateOnly,
+      employeeName,
+      dispatchingTime: currentTimeFormatted,
+      dispatchingComment: 'Cumplimiento de Meta',
+    };
+    io.emit('newAttendanceRecord', {
+      type: 'dispatching',
+      record: processedRecord,
+      timestamp: currentTimeSQL,
+    });
+
     return res.status(201).json({
       message: "Despacho registrado exitosamente. Tu hora de salida ha sido establecida a las " + formatTimeWithPeriod(dayjs(scheduledExitTimeSQL)),
       type: 'dispatching',
@@ -405,6 +420,18 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error("No se pudo actualizar el registro de permiso para regreso: " + (updateResult.error || "Error desconocido"));
         }
+        // Emitir evento Socket.IO para entrada de regreso con permiso
+        const processedRecord = {
+          employeeID,
+          date: currentDateOnly,
+          employeeName,
+          permissionEntryTime: currentTimeFormatted,
+        };
+        io.emit('newAttendanceRecord', {
+          type: 'permission_entry',
+          record: processedRecord,
+          timestamp: currentTimeSQL,
+        });
         return res.status(201).json({
           message: "Entrada de regreso con permiso registrada exitosamente", type: 'permission_entry',
           time: currentTimeFormatted, employeeID, employeeName, photoUrl,
@@ -466,7 +493,18 @@ exports.registerAttendance = async (req, res) => {
       registrationType = 'entry';
       responseMessage = "Entrada registrada exitosamente";
       attendanceID = result.insertId;
-
+      // Emitir evento Socket.IO para nueva entrada
+      const processedRecord = {
+        employeeID,
+        date: currentDateOnly,
+        employeeName,
+        entryTime: currentTimeFormatted,
+      };
+      io.emit('newAttendanceRecord', {
+        type: 'entry',
+        record: processedRecord,
+        timestamp: currentTimeSQL,
+      });
     } else {
       // --- CASO 2: YA EXISTE REGISTRO HOY (sin exitTime, sin despacho, sin permiso pendiente) ---
       const latestRecord = existingRecords[0];
@@ -485,6 +523,18 @@ exports.registerAttendance = async (req, res) => {
           registrationType = 'permission_exit';
           responseMessage = "Salida con permiso registrada exitosamente";
           attendanceID = latestRecord.hattendanceID;
+          // Emitir evento Socket.IO para salida con permiso
+          const processedRecord = {
+            employeeID,
+            date: currentDateOnly,
+            employeeName,
+            permissionExitTime: currentTimeFormatted,
+          };
+          io.emit('newAttendanceRecord', {
+            type: 'permission_exit',
+            record: processedRecord,
+            timestamp: currentTimeSQL,
+          });
         } else {
           // --- CASO 2.1.2: INTENTO DE MARCAR DE NUEVO (SIN PERMISO Y ANTES DE FIN DE TURNO) ---
           return res.status(400).json({
@@ -503,6 +553,18 @@ exports.registerAttendance = async (req, res) => {
           registrationType = 'exit';
           responseMessage = "Salida registrada exitosamente";
           attendanceID = latestRecord.hattendanceID;
+          // Emitir evento Socket.IO para salida normal
+          const processedRecord = {
+            employeeID,
+            date: currentDateOnly,
+            employeeName,
+            exitTime: currentTimeFormatted,
+          };
+          io.emit('newAttendanceRecord', {
+            type: 'exit',
+            record: processedRecord,
+            timestamp: currentTimeSQL,
+          });
         } else {
           // --- CASO 2.1.4: INTENTO DE SALIDA FUERA DE VENTANA DE GRACIA ---
           return res.status(400).json({
