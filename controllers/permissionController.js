@@ -2,11 +2,11 @@ const db = require("../config/db");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
+require('dayjs/locale/es')
 
 // Extender dayjs con plugins de UTC y Timezone
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
 // Función para obtener tipos de permisos y lista de empleados que marcaron hoy
 exports.getPermissionData = async (req, res) => {
   try {
@@ -21,7 +21,27 @@ exports.getPermissionData = async (req, res) => {
        WHERE DATE(a.date) = ?`,
       [currentDate]
     );
-    res.json({ permissions: permissionResults, employees: employeeResults });
+
+    let currentTime = dayjs().format("HH:mm:ss");
+
+    const [shiftDetail] = await db.query(
+      `
+        SELECT 
+          s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
+        FROM pmsb.detailsshift_emp ds
+        INNER JOIN pmsb.shifts_emp s ON ds.shiftID = s.shiftID
+        WHERE s.companyID = 1
+          AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
+          AND (
+          (ds.startTime < ds.endTime AND '${currentTime}' BETWEEN ds.startTime AND ds.endTime)
+          OR
+          (ds.startTime > ds.endTime AND 
+          ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
+        )
+      `
+    );
+
+    res.json({ permissions: permissionResults, employees: employeeResults, shiftDetail });
   } catch (err) {
     console.error("Error fetching permission data:", err);
     res.status(500).json({
