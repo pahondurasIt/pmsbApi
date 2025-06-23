@@ -302,7 +302,7 @@ exports.createEmployee = async (req, res) => {
             updatedBy
             )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
-      x.stateID.stateID, x.cityID.cityID, x.sectorID.sectorID, x.suburbID.suburbID,
+      x.stateID, x.cityID, x.sectorID, x.suburbID,
       x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoriaADD]);
     });
 

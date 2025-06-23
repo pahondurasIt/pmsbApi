@@ -35,3 +35,20 @@ exports.getEmpleadosActivos = async (req, res) => {
         res.status(500).json({ message: 'Error al obtener datos para el formulario de empleados' });
     }
 };
+
+exports.getAttendanceReport = async (req, res) => {
+    const { fechaInicial, fechaFinal } = req.params;
+
+    try {
+        const [rows] = await dbdos.query(
+            `CALL attendanceEmployee_report(?, ?)`,
+            [fechaInicial, fechaFinal]
+        );
+
+        // Debido a cómo MySQL2 maneja los resultados de CALL, usamos rows[0]
+        res.json(rows[0]); 
+    } catch (error) {
+        console.error('Error al ejecutar procedimiento almacenado:', error);
+        res.status(500).json({ message: 'Error al obtener reporte de asistencia' });
+    }
+};
