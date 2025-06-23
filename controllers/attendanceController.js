@@ -514,6 +514,19 @@ exports.registerAttendance = async (req, res) => {
         const permissionStatus = await checkActivePermission(employeeID);
         if (permissionStatus.hasActivePermission && !permissionStatus.hasExitedWithPermission) {
           // --- CASO 2.1.1: SALIDA CON PERMISO (ANTES DE FIN DE TURNO) ---
+          // Nueva validación: Verificar si la hora actual es mayor o igual a exitTimePermission
+          const [permissionDetails] = await db.query(
+            `SELECT exitTimePermission FROM permissionattendance_emp 
+             WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
+            [employeeID, currentDateOnly]
+          );
+          const allowedExitTime = dayjs(`${currentDateOnly} ${permissionDetails[0].exitTimePermission}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
+          if (currentDateTimeCST.isBefore(allowedExitTime)) {
+            return res.status(400).json({
+              message: `No puedes registrar la salida con permiso hasta las ${allowedExitTime.format("h:mm A")}.`,
+              employeeName, photoUrl
+            });
+          }
           isPermissionExit = true;
           permissionExitTime = currentTimeFormatted;
           const updateResult = await updatePermissionRecordWithExit(permissionStatus.permissionData.permissionID, currentTimeSQL);
