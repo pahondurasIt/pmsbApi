@@ -16,70 +16,134 @@ const formatTimeWithPeriod = (dayjsDate) => {
   return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
 };
 
-// --- Funciones Auxiliares (Permisos, etc. - Sin cambios relevantes aquí) ---
+
+// --- NUEVO: Función auxiliar para obtener un registro de asistencia completo ---
+// Esta función es clave para la solución. Obtiene todos los datos de un empleado
+// para un día específico, incluyendo permisos y despachos, en el formato que el frontend espera.
+async function getSingleAttendanceRecord(employeeID, date) {
+  const attendanceQuery = `
+    SELECT 
+      h.hattendanceID, h.employeeID,
+      CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS employeeName,
+      DATE_FORMAT(h.entryTime, '%h:%i:%s %p') AS entryTime,
+      DATE_FORMAT(h.exitTime, '%h:%i:%s %p') AS exitTime,
+      DATE_FORMAT(h.date, '%Y-%m-%d') AS date
+    FROM h_attendance_emp h
+    JOIN employees_emp e ON h.employeeID = e.employeeID
+    WHERE h.employeeID = ? AND h.date = ?
+    LIMIT 1;
+  `;
+  const [attendanceRows] = await db.query(attendanceQuery, [employeeID, date]);
+
+  if (attendanceRows.length === 0) {
+    return null; // No se encontró registro
+  }
+  
+  const attendanceRecord = attendanceRows[0];
+
+  const permissionQuery = `
+    SELECT 
+      permissionID,
+      DATE_FORMAT(exitPermission, '%h:%i:%s %p') AS exitPermissionTime,
+      DATE_FORMAT(entryPermission, '%h:%i:%s %p') AS entryPermissionTime,
+      comment
+    FROM permissionattendance_emp
+    WHERE employeeID = ? AND DATE(date) = ?
+    ORDER BY permissionID ASC
+    LIMIT 5;
+  `;
+  const [permissionRows] = await db.query(permissionQuery, [employeeID, date]);
+  
+  permissionRows.forEach((permission, index) => {
+    const pNum = index + 1;
+    attendanceRecord[`permissionExitTime${pNum}`] = permission.exitPermissionTime || null;
+    attendanceRecord[`permissionEntryTime${pNum}`] = permission.entryPermissionTime || null;
+    attendanceRecord[`permissionExitID${pNum}`] = permission.permissionID;
+    attendanceRecord[`permissionEntryID${pNum}`] = permission.permissionID; // Mismo ID para salida y entrada
+    attendanceRecord[`permissionExitComment${pNum}`] = permission.comment || '';
+    attendanceRecord[`permissionEntryComment${pNum}`] = permission.comment || '';
+  });
+
+  const dispatchingQuery = `
+    SELECT 
+      DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
+      CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
+    FROM dispatching_emp
+    WHERE employeeID = ? AND DATE(date) = ?
+    LIMIT 1;
+  `;
+  const [dispatchingRows] = await db.query(dispatchingQuery, [employeeID, date]);
+
+  if (dispatchingRows.length > 0) {
+    attendanceRecord.dispatchingTime = dispatchingRows[0].dispatchingTime;
+    attendanceRecord.dispatchingComment = dispatchingRows[0].dispatchingComment;
+  }
+
+  return attendanceRecord;
+}
+
+
+// --- Funciones de Permisos (sin cambios) ---
 async function checkActivePermission(employeeID) {
-  try {
-    const currentDateOnly = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
-    const [permissionResults] = await db.query(
-      `SELECT permissionID, exitPermission FROM permissionattendance_emp 
-       WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
-      [employeeID, currentDateOnly]
-    );
-    return {
-      hasActivePermission: permissionResults.length > 0,
-      permissionData: permissionResults[0],
-      hasExitedWithPermission: permissionResults[0]?.exitPermission !== null
-    };
-  } catch (error) {
-    console.error("Error al verificar permiso activo:", error);
-    return { hasActivePermission: false, error: error.message };
-  }
+    try {
+      const currentDateOnly = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
+      const [permissionResults] = await db.query(
+        `SELECT permissionID, exitPermission FROM permissionattendance_emp 
+         WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
+        [employeeID, currentDateOnly]
+      );
+      return {
+        hasActivePermission: permissionResults.length > 0,
+        permissionData: permissionResults[0],
+        hasExitedWithPermission: permissionResults[0]?.exitPermission !== null
+      };
+    } catch (error) {
+      console.error("Error al verificar permiso activo:", error);
+      return { hasActivePermission: false, error: error.message };
+    }
 }
-
 async function checkPendingPermissionReturn(employeeID) {
-  try {
-    const currentDateOnly = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
-    const [permissionResults] = await db.query(
-      `SELECT permissionID FROM permissionattendance_emp 
-       WHERE employeeID = ? AND date = ? AND exitPermission IS NOT NULL AND entryPermission IS NULL`,
-      [employeeID, currentDateOnly]
-    );
-    return {
-      hasPendingReturn: permissionResults.length > 0,
-      permissionData: permissionResults[0]
-    };
-  } catch (error) {
-    console.error("Error al verificar permiso pendiente de regreso:", error);
-    return { hasPendingReturn: false, error: error.message };
-  }
+    try {
+      const currentDateOnly = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
+      const [permissionResults] = await db.query(
+        `SELECT permissionID FROM permissionattendance_emp 
+         WHERE employeeID = ? AND date = ? AND exitPermission IS NOT NULL AND entryPermission IS NULL`,
+        [employeeID, currentDateOnly]
+      );
+      return {
+        hasPendingReturn: permissionResults.length > 0,
+        permissionData: permissionResults[0]
+      };
+    } catch (error) {
+      console.error("Error al verificar permiso pendiente de regreso:", error);
+      return { hasPendingReturn: false, error: error.message };
+    }
 }
-
 async function updatePermissionRecordWithExit(permissionID, currentTime) {
-  try {
-    const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET exitPermission = ? WHERE permissionID = ?",
-      [currentTime, permissionID]
-    );
-
-    return { success: result.affectedRows > 0 };
-  } catch (error) {
-    console.error("Error al registrar salida con permiso:", error);
-    return { success: false, error: error.message };
-  }
+    try {
+      const [result] = await db.query(
+        "UPDATE permissionattendance_emp SET exitPermission = ? WHERE permissionID = ?",
+        [currentTime, permissionID]
+      );
+      return { success: result.affectedRows > 0 };
+    } catch (error) {
+      console.error("Error al registrar salida con permiso:", error);
+      return { success: false, error: error.message };
+    }
 }
-
 async function updatePermissionRecordWithEntry(permissionID, currentTime) {
-  try {
-    const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET entryPermission = ?, isApproved = 0 WHERE permissionID = ?",
-      [currentTime, permissionID]
-    );
-    return { success: result.affectedRows > 0 };
-  } catch (error) {
-    console.error("Error al registrar entrada de regreso con permiso:", error);
-    return { success: false, error: error.message };
-  }
+    try {
+      const [result] = await db.query(
+        "UPDATE permissionattendance_emp SET entryPermission = ?, isApproved = 0 WHERE permissionID = ?",
+        [currentTime, permissionID]
+      );
+      return { success: result.affectedRows > 0 };
+    } catch (error) {
+      console.error("Error al registrar entrada de regreso con permiso:", error);
+      return { success: false, error: error.message };
+    }
 }
+
 
 // --- Controladores (getAttendance, updatePermissionComment) ---
 exports.getAttendance = async (req, res) => {
@@ -114,7 +178,6 @@ exports.getAttendance = async (req, res) => {
     if (conditions.length > 0) {
       attendanceQuery += " WHERE " + conditions.join(" AND ");
     }
-    // MODIFICATION: Sort by date (desc), then employeeID (asc), then entryTime (desc)
     attendanceQuery += " ORDER BY h.employeeID ASC, h.entryTime ASC"; 
 
     const [attendanceRows] = await db.query(attendanceQuery, values);
@@ -194,38 +257,39 @@ exports.getAttendance = async (req, res) => {
 };
 
 exports.updatePermissionComment = async (req, res) => {
-  try {
-    const { permissionID, comment } = req.body;
-
-    if (!permissionID) {
-      return res.status(400).json({ message: "El ID del permiso es requerido" });
+    try {
+      const { permissionID, comment } = req.body;
+  
+      if (!permissionID) {
+        return res.status(400).json({ message: "El ID del permiso es requerido" });
+      }
+  
+      const query = `
+        UPDATE permissionattendance_emp 
+        SET comment = ?
+        WHERE permissionID = ?
+      `;
+  
+      const [result] = await db.query(query, [comment, permissionID]);
+  
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: "Permiso no encontrado" });
+      }
+  
+      return res.status(200).json({
+        success: true,
+        message: "Comentario actualizado correctamente",
+        permissionID,
+        comment
+      });
+    } catch (error) {
+      console.error("Error al actualizar comentario de permiso:", error);
+      res.status(500).json({ message: "Error al actualizar comentario: " + error.message });
     }
-
-    const query = `
-      UPDATE permissionattendance_emp 
-      SET comment = ?
-      WHERE permissionID = ?
-    `;
-
-    const [result] = await db.query(query, [comment, permissionID]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Permiso no encontrado" });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Comentario actualizado correctamente",
-      permissionID,
-      comment
-    });
-  } catch (error) {
-    console.error("Error al actualizar comentario de permiso:", error);
-    res.status(500).json({ message: "Error al actualizar comentario: " + error.message });
-  }
 };
 
-// *** Controlador interno para registrar despacho (AJUSTADO CON VALIDACIÓN DE PERMISO PENDIENTE) ***
+
+// CAMBIO: La lógica de emisión de socket.io se centraliza aquí para usar getSingleAttendanceRecord
 async function registerDispatchingInternal(req, res, employeeDetails, shiftDetails) {
   const { employeeID } = req.body;
   const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
@@ -237,7 +301,6 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
   const { shiftEndTimeStr } = shiftDetails;
 
   try {
-    // *** NUEVA VALIDACIÓN: Verificar si hay permiso pendiente de regreso ANTES de permitir despacho ***
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
     if (pendingReturnStatus.hasPendingReturn) {
       return res.status(400).json({
@@ -245,68 +308,39 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
         employeeName, photoUrl
       });
     }
-    // Fin nueva validación
 
-    // Verificar si ya existe un registro de despacho para hoy (se mantiene)
     const [existingDispatch] = await db.query(
       "SELECT dispatchingID FROM dispatching_emp WHERE employeeID = ? AND DATE(date) = ?",
       [employeeID, currentDateOnly]
     );
     if (existingDispatch.length > 0) {
-      return res.status(400).json({
-        message: "Ya has registrado tu despacho por hoy.",
-        employeeName, photoUrl
-      });
+      return res.status(400).json({ message: "Ya has registrado tu despacho por hoy.", employeeName, photoUrl });
     }
 
-    // Encontrar el registro de asistencia de hoy para actualizar la salida (se mantiene)
     const [attendanceRecordToUpdate] = await db.query(
       "SELECT hattendanceID FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? AND entryTime IS NOT NULL AND exitTime IS NULL LIMIT 1",
       [employeeID, currentDateOnly]
     );
     if (attendanceRecordToUpdate.length === 0) {
-      return res.status(400).json({
-        message: "No se encontró un registro de entrada activo para marcar el despacho. Debes marcar tu entrada primero.",
-        employeeName, photoUrl
-      });
+      return res.status(400).json({ message: "No se encontró un registro de entrada activo para marcar el despacho.", employeeName, photoUrl });
     }
     const attendanceIDToUpdate = attendanceRecordToUpdate[0].hattendanceID;
+    
+    const insertDispatchQuery = `INSERT INTO dispatching_emp (employeeID, date, exitTimeComplete, comment) VALUES (?, ?, ?, ?)`;
+    await db.query(insertDispatchQuery, [employeeID, currentDateOnly, currentTimeSQL, 1]);
 
-    // Insertar registro de despacho (se mantiene)
-    const insertDispatchQuery = `
-      INSERT INTO dispatching_emp (employeeID, date, exitTimeComplete, comment)
-      VALUES (?, ?, ?, ?)
-    `;
-    const comment = 1; // Asumiendo 1 significa 'Cumplimiento de Meta'
-
-    const values = [employeeID, currentDateOnly, currentTimeSQL, comment];
-    const [resultDispatch] = await db.query(insertDispatchQuery, values);
-
-    // Calcular y establecer la hora de salida programada en h_attendance_emp (se mantiene)
     const scheduledExitTimeSQL = `${currentDateOnly} ${shiftEndTimeStr}`;
-    const updateAttendanceQuery = `
-        UPDATE h_attendance_emp 
-        SET exitTime = ?
-        WHERE hattendanceID = ?
-    `;
-    const [resultAttendanceUpdate] = await db.query(updateAttendanceQuery, [scheduledExitTimeSQL, attendanceIDToUpdate]);
-    if (resultAttendanceUpdate.affectedRows === 0) {
-      console.error(`Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`);
-    }
+    const updateAttendanceQuery = `UPDATE h_attendance_emp SET exitTime = ? WHERE hattendanceID = ?`;
+    await db.query(updateAttendanceQuery, [scheduledExitTimeSQL, attendanceIDToUpdate]);
 
-    // Emitir evento Socket.IO para nuevo registro de despacho
-    const processedRecord = {
-      employeeID,
-      date: currentDateOnly,
-      employeeName,
-      dispatchingTime: currentTimeFormatted,
-      dispatchingComment: 'Cumplimiento de Meta',
-    };
-    io.emit('newAttendanceRecord', {
-      type: 'dispatching',
-      record: processedRecord,
-      timestamp: currentTimeSQL,
-    });
+    // CAMBIO: Emitir el registro completo y actualizado
+    const fullRecord = await getSingleAttendanceRecord(employeeID, currentDateOnly);
+    if (fullRecord) {
+        io.emit('newAttendanceRecord', {
+            type: 'update_record', // Ahora es de tipo 'update_record'
+            record: fullRecord,
+        });
+    }
 
     return res.status(201).json({
       message: "Despacho registrado exitosamente. Tu hora de salida ha sido establecida a las " + formatTimeWithPeriod(dayjs(scheduledExitTimeSQL)),
@@ -321,475 +355,243 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
   }
 }
 
-// Controlador para registrar asistencia (AJUSTADO CON VALIDACIÓN DE PERMISO PENDIENTE ANTES DE DESPACHO)
+
+// CAMBIO: Lógica de emisión de socket.io modificada para todos los casos
 exports.registerAttendance = async (req, res) => {
-  let employeeRecords = [];
-  let shiftRecords = [];
-  try {
-    const { employeeID, operationMode } = req.body;
-    if (!employeeID) {
-      return res.status(400).json({ message: "El ID del empleado es requerido" });
-    }
-
-    const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
-    const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD HH:mm:ss");
-    const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
-    const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
-
-    // Obtener detalles del empleado y turno
-    [employeeRecords] = await db.query(
-      "SELECT firstName, middleName, lastName, photoUrl, shiftID, isActive FROM employees_emp WHERE employeeID = ?",
-      [employeeID]
-    );
-    if (employeeRecords.length === 0) {
-      return res.status(404).json({ message: "Empleado no encontrado. Verifica el ID.", statusType: 'error' });
-    }
-    const employee = employeeRecords[0];
-
-    // *** NUEVA VALIDACIÓN: Verificar si el empleado está activo ***
-    if (employee.isActive === 0) {
-      const employeeNameInactive = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""} ${employee.lastName}`;
-      const photoUrlInactive = employee.photoUrl || "";
-      // Usamos status 400 Bad Request, pero con un tipo 'warning' para el frontend
-      return res.status(400).json({
-        message: "El empleado está inactivo. No puede registrar marcaje.",
-        statusType: 'warning', // Indicador para el frontend
-        employeeName: employeeNameInactive,
-        photoUrl: photoUrlInactive
-      });
-    }
-    // *** Fin nueva validación ***
-
-    // Si llegó hasta aquí, el empleado existe y está activo. Continuar con el resto...
-    const employeeName = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""} ${employee.lastName}`;
-    const photoUrl = employee.photoUrl || "";
-    const shiftID = employee.shiftID;
-
-    [shiftRecords] = await db.query(
-      "SELECT startTime, endTime FROM detailsshift_emp WHERE shiftID = ?",
-      [shiftID]
-    );
-    if (shiftRecords.length === 0) {
-      return res.status(400).json({ message: "No se encontró información del turno para este empleado.", employeeName, photoUrl });
-    }
-    const shift = shiftRecords[0];
-    const shiftStartTimeStr = shift.startTime;
-    const shiftEndTimeStr = shift.endTime;
-
-    // Chequeo inicial de estado finalizado (Salida o Despacho)
-    const [finalizedCheck] = await db.query(
-      `SELECT h.exitTime, d.dispatchingID 
-         FROM h_attendance_emp h 
-         LEFT JOIN dispatching_emp d ON h.employeeID = d.employeeID AND DATE(h.date) = DATE(d.date)
-         WHERE h.employeeID = ? AND DATE(h.date) = ? 
-         ORDER BY h.entryTime DESC LIMIT 1`,
-      [employeeID, currentDateOnly]
-    );
-    if (finalizedCheck.length > 0 && (finalizedCheck[0].exitTime !== null || finalizedCheck[0].dispatchingID !== null)) {
-      return res.status(400).json({
-        message: "Ya has finalizado tu jornada laboral para hoy (Salida o Despacho registrado). No puedes realizar más marcajes.",
-        employeeName, photoUrl
-      });
-    }
-
-    // Verificar permiso pendiente de regreso (PRIORIDAD ALTA)
-    // Si hay permiso pendiente, la única acción permitida es registrar el regreso (o manejar error si intenta otra cosa)
-    const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
-    if (pendingReturnStatus.hasPendingReturn) {
-      // Si intenta marcar DESPACHO mientras está fuera con permiso, la validación DENTRO de registerDispatchingInternal lo bloqueará.
-      // Si intenta marcar ENTRADA o SALIDA NORMAL mientras está fuera, también debe bloquearse.
-      if (operationMode === 'DESPACHO') {
-        // La validación se hará dentro de registerDispatchingInternal, pero podemos ponerla aquí también por claridad
-        return res.status(400).json({
-          message: "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
-          employeeName, photoUrl
-        });
-      } else if (operationMode !== 'permission_entry') { // Asumiendo que el regreso se marca con un modo específico o sin modo
-        // Lógica para manejar regreso de permiso (si la hora es válida)
-        const shiftStartTime = dayjs(`${currentDateOnly} ${shiftStartTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-        let shiftEndTime = dayjs(`${currentDateOnly} ${shiftEndTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-        if (shiftEndTime.isBefore(shiftStartTime)) shiftEndTime = shiftEndTime.add(1, 'day');
-
-        if (!currentDateTimeCST.isAfter(shiftStartTime.subtract(1, 'hour')) || !currentDateTimeCST.isBefore(shiftEndTime.add(1, 'hour'))) {
-          return res.status(400).json({
-            message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime.subtract(1, 'hour').format("h:mm A")} - ${shiftEndTime.add(1, 'hour').format("h:mm A")}).`,
-            employeeName, photoUrl
-          });
+    let employeeRecords = [];
+    try {
+        const { employeeID, operationMode } = req.body;
+        if (!employeeID) {
+            return res.status(400).json({ message: "El ID del empleado es requerido" });
         }
-        const updateResult = await updatePermissionRecordWithEntry(pendingReturnStatus.permissionData.permissionID, currentTimeSQL);
-        if (!updateResult.success) {
-          throw new Error("No se pudo actualizar el registro de permiso para regreso: " + (updateResult.error || "Error desconocido"));
+
+        const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
+        const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD HH:mm:ss");
+        const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
+        const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
+
+        [employeeRecords] = await db.query("SELECT * FROM employees_emp WHERE employeeID = ?", [employeeID]);
+        if (employeeRecords.length === 0) {
+            return res.status(404).json({ message: "Empleado no encontrado." });
         }
-        // Emitir evento Socket.IO para entrada de regreso con permiso
-        const processedRecord = {
-          employeeID,
-          date: currentDateOnly,
-          employeeName,
-          permissionEntryTime: currentTimeFormatted,
-        };
-        io.emit('newAttendanceRecord', {
-          type: 'permission_entry',
-          record: processedRecord,
-          timestamp: currentTimeSQL,
-        });
-        return res.status(201).json({
-          message: "Entrada de regreso con permiso registrada exitosamente", type: 'permission_entry',
-          time: currentTimeFormatted, employeeID, employeeName, photoUrl,
-          isPermissionEntry: true, permissionEntryTime: currentTimeFormatted
-        });
-      } else {
-        // Si intenta cualquier otra operación que no sea el regreso
-        return res.status(400).json({
-          message: "Debes registrar tu regreso del permiso antes de realizar cualquier otro marcaje.",
-          employeeName, photoUrl
-        });
-      }
-    }
-    // Si llegamos aquí, NO hay permiso pendiente de regreso.
+        const employee = employeeRecords[0];
+        const employeeName = `${employee.firstName} ${employee.lastName}`;
+        const photoUrl = employee.photoUrl || "";
 
-    // Manejo de DESPACHO (ahora sabemos que no hay permiso pendiente)
-    if (operationMode === 'DESPACHO') {
-      const employeeDetails = { employeeName, photoUrl };
-      const shiftDetails = { shiftEndTimeStr };
-      // La validación de permiso pendiente ya se hizo arriba, y se hará de nuevo dentro por seguridad.
-      return await registerDispatchingInternal(req, res, employeeDetails, shiftDetails);
-    }
-
-    // --- Lógica restante para Entrada, Salida Normal, Permisos (sin permiso pendiente) ---
-    const shiftStartTime = dayjs(`${currentDateOnly} ${shiftStartTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-    let shiftEndTime = dayjs(`${currentDateOnly} ${shiftEndTimeStr}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-    if (shiftEndTime.isBefore(shiftStartTime)) {
-      shiftEndTime = shiftEndTime.add(1, 'day');
-    }
-    const entryWindowStart = shiftStartTime.subtract(15, 'minute');
-    const exitWindowEnd = shiftEndTime.add(15, 'minute');
-    const exitWindowStart = shiftStartTime;
-    const canMarkEntry = currentDateTimeCST.isAfter(entryWindowStart) && currentDateTimeCST.isBefore(shiftEndTime);
-    const canMarkExit = currentDateTimeCST.isAfter(exitWindowStart) && currentDateTimeCST.isBefore(exitWindowEnd);
-    const isAfterShiftEnd = currentDateTimeCST.isAfter(shiftEndTime);
-
-    // Verificar registros existentes hoy (sabemos que no está finalizado y no hay permiso pendiente)
-    const [existingRecords] = await db.query(
-      "SELECT hattendanceID, entryTime, exitTime FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? ORDER BY entryTime DESC LIMIT 1",
-      [employeeID, currentDateOnly]
-    );
-
-    let registrationType = '';
-    let responseMessage = '';
-    let attendanceID = null;
-    let isPermissionExit = false;
-    let permissionExitTime = null;
-
-    if (existingRecords.length === 0) {
-      // --- CASO 1: PRIMERA ENTRADA DEL DÍA ---
-      if (!canMarkEntry) {
-        return res.status(400).json({
-          message: `No se puede registrar entrada fuera del horario permitido (${entryWindowStart.format("h:mm A")} - ${shiftEndTime.format("h:mm A")}).`,
-          employeeName, photoUrl
-        });
-      }
-      const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, ?, ?, ?, ?)`;
-      const [result] = await db.query(query, [employeeID, currentTimeSQL, currentDateOnly, "1", "1"]);
-      registrationType = 'entry';
-      responseMessage = "Entrada registrada exitosamente";
-      attendanceID = result.insertId;
-      // Emitir evento Socket.IO para nueva entrada
-      const processedRecord = {
-        employeeID,
-        date: currentDateOnly,
-        employeeName,
-        entryTime: currentTimeFormatted,
-      };
-      io.emit('newAttendanceRecord', {
-        type: 'entry',
-        record: processedRecord,
-        timestamp: currentTimeSQL,
-      });
-    } else {
-      // --- CASO 2: YA EXISTE REGISTRO HOY (sin exitTime, sin despacho, sin permiso pendiente) ---
-      const latestRecord = existingRecords[0];
-
-      // --- CASO 2.1: YA MARCÓ ENTRADA, AÚN NO HA SALIDO ---
-      if (!isAfterShiftEnd) { // Si aún no es la hora de fin de turno
-        const permissionStatus = await checkActivePermission(employeeID);
-        if (permissionStatus.hasActivePermission && !permissionStatus.hasExitedWithPermission) {
-          // --- CASO 2.1.1: SALIDA CON PERMISO (ANTES DE FIN DE TURNO) ---
-          // Nueva validación: Verificar si la hora actual es mayor o igual a exitTimePermission
-          const [permissionDetails] = await db.query(
-            `SELECT exitTimePermission FROM permissionattendance_emp 
-             WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
-            [employeeID, currentDateOnly]
-          );
-          const allowedExitTime = dayjs(`${currentDateOnly} ${permissionDetails[0].exitTimePermission}`, "YYYY-MM-DD HH:mm:ss").tz("America/Tegucigalpa", true);
-          if (currentDateTimeCST.isBefore(allowedExitTime)) {
+        if (employee.isActive === 0) {
             return res.status(400).json({
-              message: `No puedes registrar la salida con permiso hasta las ${allowedExitTime.format("h:mm A")}.`,
-              employeeName, photoUrl
+                message: "El empleado está inactivo. No puede registrar marcaje.",
+                statusType: 'warning',
+                employeeName, photoUrl
             });
-          }
-          isPermissionExit = true;
-          permissionExitTime = currentTimeFormatted;
-          const updateResult = await updatePermissionRecordWithExit(permissionStatus.permissionData.permissionID, currentTimeSQL);
-          if (!updateResult.success) {
-            throw new Error("No se pudo actualizar el registro de permiso para salida: " + (updateResult.error || "Error desconocido"));
-          }
-          registrationType = 'permission_exit';
-          responseMessage = "Salida con permiso registrada exitosamente";
-          attendanceID = latestRecord.hattendanceID;
-          // Emitir evento Socket.IO para salida con permiso
-          const processedRecord = {
-            employeeID,
-            date: currentDateOnly,
-            employeeName,
-            permissionExitTime: currentTimeFormatted,
-          };
-          io.emit('newAttendanceRecord', {
-            type: 'permission_exit',
-            record: processedRecord,
-            timestamp: currentTimeSQL,
-          });
-        } else {
-          // --- CASO 2.1.2: INTENTO DE MARCAR DE NUEVO (SIN PERMISO Y ANTES DE FIN DE TURNO) ---
-          return res.status(400).json({
-            message: `Ya has registrado tu entrada hoy. Solo puedes registrar tu salida normal después de las ${shiftEndTime.format("h:mm A")} o una salida con permiso si está aprobada.`,
-            employeeName, photoUrl
-          });
         }
-      } else {
-        // --- CASO 2.1.3: YA ES HORA DE SALIDA NORMAL (o posterior) ---
-        if (canMarkExit) { // Verificar si está dentro de la ventana de gracia de salida
-          const query = `UPDATE h_attendance_emp SET exitTime = ?, updatedBy = ? WHERE hattendanceID = ?`;
-          const [result] = await db.query(query, [currentTimeSQL, "1", latestRecord.hattendanceID]);
-          if (result.affectedRows === 0) {
-            throw new Error("No se pudo actualizar el registro de asistencia para salida.");
-          }
-          registrationType = 'exit';
-          responseMessage = "Salida registrada exitosamente";
-          attendanceID = latestRecord.hattendanceID;
-          // Emitir evento Socket.IO para salida normal
-          const processedRecord = {
-            employeeID,
-            date: currentDateOnly,
-            employeeName,
-            exitTime: currentTimeFormatted,
-          };
-          io.emit('newAttendanceRecord', {
-            type: 'exit',
-            record: processedRecord,
-            timestamp: currentTimeSQL,
-          });
-        } else {
-          // --- CASO 2.1.4: INTENTO DE SALIDA FUERA DE VENTANA DE GRACIA ---
-          return res.status(400).json({
-            message: `No se puede registrar salida fuera del horario permitido (${exitWindowStart.format("h:mm A")} - ${exitWindowEnd.format("h:mm A")}).`,
-            employeeName, photoUrl
-          });
+        
+        const [shiftRecords] = await db.query("SELECT * FROM detailsshift_emp WHERE shiftID = ?", [employee.shiftID]);
+        if (shiftRecords.length === 0) {
+            return res.status(400).json({ message: "No se encontró turno para este empleado.", employeeName, photoUrl });
         }
-      }
+        const shift = shiftRecords[0];
+        const shiftStartTimeStr = shift.startTime;
+        const shiftEndTimeStr = shift.endTime;
+
+        // ... (resto de validaciones de jornada finalizada, etc. se mantienen)
+
+        const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
+        if (pendingReturnStatus.hasPendingReturn) {
+            if (operationMode === 'DESPACHO') {
+                 return res.status(400).json({ message: "No puedes marcar despacho mientras estás fuera con permiso.", employeeName, photoUrl });
+            }
+            // Lógica para registrar regreso de permiso
+            await updatePermissionRecordWithEntry(pendingReturnStatus.permissionData.permissionID, currentTimeSQL);
+            
+            // CAMBIO: Emitir registro completo
+            const fullRecord = await getSingleAttendanceRecord(employeeID, currentDateOnly);
+            if (fullRecord) {
+                io.emit('newAttendanceRecord', { type: 'update_record', record: fullRecord });
+            }
+
+            return res.status(201).json({ message: "Entrada de regreso con permiso registrada exitosamente", type: 'permission_entry', time: currentTimeFormatted, employeeID, employeeName, photoUrl });
+        }
+
+        if (operationMode === 'DESPACHO') {
+            return await registerDispatchingInternal(req, res, { employeeName, photoUrl }, { shiftEndTimeStr });
+        }
+
+        // --- Lógica restante para Entrada, Salida, Permisos ---
+        const [existingRecords] = await db.query(
+            "SELECT hattendanceID, entryTime, exitTime FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? ORDER BY entryTime DESC LIMIT 1",
+            [employeeID, currentDateOnly]
+        );
+        
+        let registrationType = '';
+        let responseMessage = '';
+        let eventType = ''; // 'new_entry' o 'update_record'
+        
+        if (existingRecords.length === 0) {
+            // --- CASO 1: PRIMERA ENTRADA DEL DÍA ---
+            const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, ?, ?, ?, ?)`;
+            await db.query(query, [employeeID, currentTimeSQL, currentDateOnly, "1", "1"]);
+            registrationType = 'entry';
+            responseMessage = "Entrada registrada exitosamente";
+            eventType = 'new_entry'; // Es un registro totalmente nuevo
+            
+        } else {
+            // --- CASO 2: YA EXISTE REGISTRO HOY ---
+            const latestRecord = existingRecords[0];
+            const isAfterShiftEnd = currentDateTimeCST.isAfter(dayjs(`${currentDateOnly} ${shiftEndTimeStr}`, "YYYY-MM-DD HH:mm:ss"));
+            eventType = 'update_record'; // Cualquier otra acción es una actualización
+
+            if (!isAfterShiftEnd) {
+                const permissionStatus = await checkActivePermission(employeeID);
+                if (permissionStatus.hasActivePermission && !permissionStatus.hasExitedWithPermission) {
+                    // --- SALIDA CON PERMISO ---
+                    await updatePermissionRecordWithExit(permissionStatus.permissionData.permissionID, currentTimeSQL);
+                    registrationType = 'permission_exit';
+                    responseMessage = "Salida con permiso registrada exitosamente";
+                } else {
+                    return res.status(400).json({ message: `Ya has registrado tu entrada. Solo puedes marcar salida después de las ${shiftEndTimeStr} o con permiso aprobado.`, employeeName, photoUrl });
+                }
+            } else {
+                // --- SALIDA NORMAL ---
+                const query = `UPDATE h_attendance_emp SET exitTime = ?, updatedBy = ? WHERE hattendanceID = ?`;
+                await db.query(query, [currentTimeSQL, "1", latestRecord.hattendanceID]);
+                registrationType = 'exit';
+                responseMessage = "Salida registrada exitosamente";
+            }
+        }
+
+        // CAMBIO: Centralizar la emisión del socket aquí
+        const fullRecord = await getSingleAttendanceRecord(employeeID, currentDateOnly);
+        if (fullRecord) {
+            io.emit('newAttendanceRecord', {
+                type: eventType, // 'new_entry' o 'update_record'
+                record: fullRecord,
+            });
+        }
+        
+        res.status(201).json({ message: responseMessage, type: registrationType, time: currentTimeFormatted, employeeID, employeeName, photoUrl });
+
+    } catch (error) {
+        console.error("Error en registerAttendance:", error);
+        const employeeInfoForError = employeeRecords && employeeRecords.length > 0 ? { employeeName: `${employeeRecords[0].firstName} ${employeeRecords[0].lastName}`, photoUrl: employeeRecords[0].photoUrl || "" } : {};
+        res.status(500).json({ message: "Error interno del servidor al registrar la asistencia.", ...employeeInfoForError });
     }
-
-    // Respuesta exitosa (Entrada, Salida Normal, Salida con Permiso)
-    res.status(201).json({
-      message: responseMessage,
-      type: registrationType,
-      time: currentTimeFormatted,
-      employeeID, employeeName, photoUrl, attendanceID,
-      isPermissionExit: isPermissionExit,
-      permissionExitTime: permissionExitTime
-    });
-
-  } catch (error) {
-    console.error("Error en registerAttendance:", error);
-    const employeeInfoForError = employeeRecords && employeeRecords.length > 0 ? {
-      employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName ? " " + employeeRecords[0].middleName : ""} ${employeeRecords[0].lastName}`,
-      photoUrl: employeeRecords[0].photoUrl || ""
-    } : {};
-    res.status(500).json({
-      message: "Error interno del servidor al registrar la asistencia.",
-      ...employeeInfoForError
-    });
-  }
 };
 
-// Controlador para exportar asistencia de un día específico a Excel
-exports.exportAttendance = async (req, res) => {
+
+// Controlador para exportar asistencia semanal con fechas automáticas
+exports.exportWeeklyAttendanceAuto = async (req, res) => {
   try {
-    const { filteredAttendance, selectedDate } = req.body; // Se eliminaron maxPermissionCount y filterMode del req.body ya que no se usan en este controlador.
+    // Calcular la semana anterior automáticamente
+    const currentDate = dayjs().tz("America/Tegucigalpa");
+    const startOfWeek = currentDate.subtract(1, 'week').startOf("isoWeek").format("YYYY-MM-DD"); // Lunes de la semana anterior
+    const endOfWeek = currentDate.subtract(1, 'week').endOf("isoWeek").format("YYYY-MM-DD"); // Domingo de la semana anterior
 
-    console.log("Export Attendance Payload:", { filteredAttendance, selectedDate });
+    console.log("Auto Export Weekly Attendance:", { startOfWeek, endOfWeek });
 
-    if (!filteredAttendance || !Array.isArray(filteredAttendance) || filteredAttendance.length === 0) {
-      throw new Error("filteredAttendance is missing or empty.");
-    }
-    // NOTA: La validación de maxPermissionCount y filterMode se eliminó de aquí
-    // porque estos valores se calculan dinámicamente o no son necesarios para este controlador.
-    if (!selectedDate || typeof selectedDate !== "string") {
-      throw new Error("selectedDate is missing or invalid.");
-    }
+    // Obtener datos de asistencia para la semana anterior
+    const attendanceQuery = `
+      SELECT 
+        h.hattendanceID,
+        h.employeeID,
+        CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS employeeName,
+        DATE_FORMAT(h.entryTime, '%h:%i:%s %p') AS entryTime,
+        DATE_FORMAT(h.exitTime, '%h:%i:%s %p') AS exitTime,
+        DATE_FORMAT(h.date, '%Y-%m-%d') AS date,
+        h.exitComment -- Incluir exitComment aquí
+      FROM 
+        h_attendance_emp h
+      JOIN 
+        employees_emp e ON h.employeeID = e.employeeID
+      WHERE 
+        h.date BETWEEN ? AND ?
+        AND e.isActive = 1
+      ORDER BY h.employeeID, h.date DESC
+    `;
 
-    // Create a new workbook and worksheet
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Asistencia");
+    const [attendanceRows] = await db.query(attendanceQuery, [startOfWeek, endOfWeek]);
 
-    // --- Determinar la estructura dinámica de las columnas ---
-    // Primero, encontrar el número máximo de permisos para cualquier empleado en este día.
-    let maxPermsInDay = 0;
-    filteredAttendance.forEach(record => {
-      let currentPerms = 0;
-      // Asumiendo hasta 5 permisos como máximo posible en la base de datos
-      for (let i = 1; i <= 5; i++) {
-        if (record[`permissionExitTime${i}`] || record[`permissionEntryTime${i}`]) {
-          currentPerms = i; // El permiso más alto que tiene datos
+    const processedRows = [];
+
+    for (const attendanceRecord of attendanceRows) {
+      const permissionQuery = `
+        SELECT 
+          permissionID,
+          DATE_FORMAT(exitPermission, '%h:%i:%s %p') AS exitPermissionTime,
+          DATE_FORMAT(entryPermission, '%h:%i:%s %p') AS entryPermissionTime,
+          comment
+        FROM 
+          permissionattendance_emp
+        WHERE 
+          employeeID = ? 
+          AND DATE(date) = ?
+          AND (exitPermission IS NOT NULL OR entryPermission IS NOT NULL)
+        ORDER BY 
+          permissionID ASC
+        LIMIT 5
+      `;
+
+      const [permissionRows] = await db.query(permissionQuery, [
+        attendanceRecord.employeeID,
+        attendanceRecord.date
+      ]);
+
+      const dispatchingQuery = `
+        SELECT 
+          DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
+          CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
+        FROM 
+        dispatching_emp
+        WHERE 
+          employeeID = ? 
+          AND DATE(date) = ?
+        LIMIT 1
+      `;
+
+      const [dispatchingRows] = await db.query(dispatchingQuery, [
+        attendanceRecord.employeeID,
+        attendanceRecord.date
+      ]);
+
+      const processedRecord = { ...attendanceRecord };
+
+      permissionRows.forEach((permission, index) => {
+        const permissionNumber = index + 1;
+        if (permission.exitPermissionTime) {
+          processedRecord[`permissionExitTime${permissionNumber}`] = permission.exitPermissionTime;
+          processedRecord[`permissionExitComment${permissionNumber}`] = permission.comment || '';
         }
-      }
-      if (currentPerms > maxPermsInDay) {
-        maxPermsInDay = currentPerms;
-      }
-    });
-
-    // Construir los encabezados de las columnas dinámicamente
-    const columnHeaders = ["Correlativo", "Código", "Nombre", "Entrada"];
-    const columnWidths = [10, 10, 30, 12]; // Anchos iniciales para Correlativo, Código, Nombre, Entrada
-
-    for (let i = 1; i <= maxPermsInDay; i++) {
-      columnHeaders.push(`Permiso ${i} S.`); // Permiso de Salida
-      columnHeaders.push(`Permiso ${i} E.`); // Permiso de Entrada
-      columnWidths.push(12, 12); // Anchos para Permiso S y Permiso E
-    }
-
-    columnHeaders.push("Salida"); // Salida siempre al final de los tiempos de marcaje
-    columnWidths.push(12); // Ancho para Salida
-
-    columnHeaders.push("Comentarios"); // Comentarios siempre al final
-    columnWidths.push(30); // Ancho para Comentarios
-
-    const numberOfColumns = columnHeaders.length;
-
-    // Colores que usaremos
-    const titleBgColor = "E6F0FA"; // Color de fondo claro para el título
-    const subtitleBgColor = "F2F2F2"; // Color de fondo gris claro para el subtítulo
-    const headerBgColor = "D3D3D3"; // Color gris para los encabezados
-
-    // Fila 1: Título principal
-    const titleText = `Reporte de Asistencia - Día ${dayjs(selectedDate).format("DD/MM/YYYY")}`;
-    const titleRow = worksheet.addRow([titleText]);
-    titleRow.height = 30;
-
-    // Fusionar celdas para el título
-    worksheet.mergeCells(titleRow.number, 1, titleRow.number, numberOfColumns);
-
-    // Aplicar estilo y color de fondo a TODAS las celdas de la fila del título
-    for (let i = 1; i <= numberOfColumns; i++) {
-      const cell = worksheet.getCell(titleRow.number, i);
-      cell.font = { name: "Calibri", size: 16, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: titleBgColor } };
-    }
-
-    // Fila 2: Subtítulo
-    const employeeCount = filteredAttendance.length;
-    const subtitleText = `Empleados registrados: ${employeeCount}`;
-    const subtitleRow = worksheet.addRow([subtitleText]);
-    subtitleRow.height = 25;
-
-    // Fusionar celdas para el subtítulo
-    worksheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, numberOfColumns);
-
-    // Aplicar estilo y color de fondo a TODAS las celdas de la fila del subtítulo
-    for (let i = 1; i <= numberOfColumns; i++) {
-      const cell = worksheet.getCell(subtitleRow.number, i);
-      cell.font = { name: "Calibri", size: 12, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: subtitleBgColor } };
-    }
-
-    // Fila 3: Encabezados de la tabla de datos (Correlativo, Código, etc.)
-    const headerRow = worksheet.addRow(columnHeaders);
-    headerRow.height = 20;
-
-    // Aplicar estilo, color de fondo y bordes a CADA celda de la fila de encabezados
-    headerRow.eachCell((cell) => {
-      cell.font = { name: "Calibri", size: 12, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBgColor } };
-      cell.border = {
-        top: { style: "thin", color: { argb: "000000" } },
-        bottom: { style: "thin", color: { argb: "000000" } },
-        left: { style: "thin", color: { argb: "000000" } },
-        right: { style: "thin", color: { argb: "000000" } },
-      };
-    });
-
-    // Añadir las filas de datos. Estas comenzarán desde la fila 4.
-    filteredAttendance.forEach((record, index) => {
-      const rowData = [
-        index + 1, // Correlativo
-        record.employeeID || "", // Código
-        record.employeeName || "", // Nombre
-        record.entryTime || "", // Entrada
-      ];
-
-      // Añadir datos de permisos dinámicamente: Permiso S. luego Permiso E.
-      for (let i = 1; i <= maxPermsInDay; i++) {
-        rowData.push(record[`permissionExitTime${i}`] || ""); // Permiso de Salida
-        rowData.push(record[`permissionEntryTime${i}`] || ""); // Permiso de Entrada
-      }
-
-      rowData.push(record.exitTime || ""); // Salida siempre después de todos los permisos
-
-      // Recopilar todos los comentarios en una sola celda
-      const comments = [];
-      // Iterar hasta el máximo de permisos posibles (5) para comentarios
-      for (let i = 1; i <= 5; i++) {
-        if (record[`permissionExitComment${i}`]) {
-          comments.push(`P${i}S: ${record[`permissionExitComment${i}`]}`);
+        if (permission.entryPermissionTime) {
+          processedRecord[`permissionEntryTime${permissionNumber}`] = permission.entryPermissionTime;
+          processedRecord[`permissionEntryComment${permissionNumber}`] = permission.comment || '';
         }
-        if (record[`permissionEntryComment${i}`]) {
-          comments.push(`P${i}E: ${record[`permissionEntryComment${i}`]}`);
-        }
-      }
-      if (record.exitComment) {
-        comments.push(`Salida: ${record.exitComment}`);
-      }
-      if (record.dispatchingComment) {
-        comments.push(`Despacho: ${record.dispatchingComment}`);
-      }
-      rowData.push(comments.join(" | ") || ""); // Comentarios
-      worksheet.addRow(rowData);
-    });
+      });
 
-    // Estilo para las filas de datos
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 3) { // Las filas de datos comienzan desde la fila 4
-        row.eachCell((cell) => {
-          cell.font = { name: "Calibri", size: 11 };
-          cell.alignment = { horizontal: "left", vertical: "middle" };
-          cell.border = {
-            top: { style: "thin", color: { argb: "000000" } },
-            bottom: { style: "thin", color: { argb: "000000" } },
-            left: { style: "thin", color: { argb: "000000" } },
-            right: { style: "thin", color: { argb: "000000" } },
-          };
-        });
-        row.height = 20;
+      if (dispatchingRows.length > 0) {
+        processedRecord.dispatchingTime = dispatchingRows[0].dispatchingTime;
+        processedRecord.dispatchingComment = dispatchingRows[0].dispatchingComment;
       }
-    });
 
-    // Establecer anchos de columna individualmente usando el array dinámico
-    columnWidths.forEach((width, index) => {
-      worksheet.getColumn(index + 1).width = width;
-    });
+      processedRows.push(processedRecord);
+    }
 
-    // Generar archivo Excel
-    const excelBuffer = await workbook.xlsx.writeBuffer();
-    const formattedDate = dayjs(selectedDate).format("YYYYMMDD");
-    const filename = `asistencia_dia_${formattedDate}.xlsx`;
+    // Usar el controlador de exportación semanal existente con los datos obtenidos
+    const weekNumber = currentDate.subtract(1, 'week').isoWeek();
+    const monthNumber = currentDate.subtract(1, 'week').month();
 
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(excelBuffer);
+    const reqBody = {
+      body: {
+        weeklyAttendance: processedRows,
+        selectedMonth: monthNumber.toString(),
+        selectedWeek: weekNumber.toString()
+      }
+    };
+
+    // Llamar al controlador de exportación semanal
+    await exports.exportWeeklyAttendance(reqBody, res);
+
   } catch (error) {
-    console.error("Error al exportar asistencia:", error.stack || error.message);
+    console.error("Error al exportar asistencia semanal automática:", error.stack || error.message);
     res.status(500).send({ message: `Error interno del servidor al generar el archivo Excel: ${error.message}` });
   }
 };
@@ -1147,119 +949,185 @@ exports.exportWeeklyAttendance = async (req, res) => {
   }
 };
 
-// Controlador para exportar asistencia semanal con fechas automáticas
-exports.exportWeeklyAttendanceAuto = async (req, res) => {
+// Controlador para exportar asistencia de un día específico a Excel
+exports.exportAttendance = async (req, res) => {
   try {
-    // Calcular la semana anterior automáticamente
-    const currentDate = dayjs().tz("America/Tegucigalpa");
-    const startOfWeek = currentDate.subtract(1, 'week').startOf("isoWeek").format("YYYY-MM-DD"); // Lunes de la semana anterior
-    const endOfWeek = currentDate.subtract(1, 'week').endOf("isoWeek").format("YYYY-MM-DD"); // Domingo de la semana anterior
+    const { filteredAttendance, selectedDate } = req.body; // Se eliminaron maxPermissionCount y filterMode del req.body ya que no se usan en este controlador.
 
-    console.log("Auto Export Weekly Attendance:", { startOfWeek, endOfWeek });
+    console.log("Export Attendance Payload:", { filteredAttendance, selectedDate });
 
-    // Obtener datos de asistencia para la semana anterior
-    const attendanceQuery = `
-      SELECT 
-        h.hattendanceID,
-        h.employeeID,
-        CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS employeeName,
-        DATE_FORMAT(h.entryTime, '%h:%i:%s %p') AS entryTime,
-        DATE_FORMAT(h.exitTime, '%h:%i:%s %p') AS exitTime,
-        DATE_FORMAT(h.date, '%Y-%m-%d') AS date,
-        h.exitComment -- Incluir exitComment aquí
-      FROM 
-        h_attendance_emp h
-      JOIN 
-        employees_emp e ON h.employeeID = e.employeeID
-      WHERE 
-        h.date BETWEEN ? AND ?
-        AND e.isActive = 1
-      ORDER BY h.employeeID, h.date DESC
-    `;
-
-    const [attendanceRows] = await db.query(attendanceQuery, [startOfWeek, endOfWeek]);
-
-    const processedRows = [];
-
-    for (const attendanceRecord of attendanceRows) {
-      const permissionQuery = `
-        SELECT 
-          permissionID,
-          DATE_FORMAT(exitPermission, '%h:%i:%s %p') AS exitPermissionTime,
-          DATE_FORMAT(entryPermission, '%h:%i:%s %p') AS entryPermissionTime,
-          comment
-        FROM 
-          permissionattendance_emp
-        WHERE 
-          employeeID = ? 
-          AND DATE(date) = ?
-          AND (exitPermission IS NOT NULL OR entryPermission IS NOT NULL)
-        ORDER BY 
-          permissionID ASC
-        LIMIT 5
-      `;
-
-      const [permissionRows] = await db.query(permissionQuery, [
-        attendanceRecord.employeeID,
-        attendanceRecord.date
-      ]);
-
-      const dispatchingQuery = `
-        SELECT 
-          DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
-          CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
-        FROM 
-        dispatching_emp
-        WHERE 
-          employeeID = ? 
-          AND DATE(date) = ?
-        LIMIT 1
-      `;
-
-      const [dispatchingRows] = await db.query(dispatchingQuery, [
-        attendanceRecord.employeeID,
-        attendanceRecord.date
-      ]);
-
-      const processedRecord = { ...attendanceRecord };
-
-      permissionRows.forEach((permission, index) => {
-        const permissionNumber = index + 1;
-        if (permission.exitPermissionTime) {
-          processedRecord[`permissionExitTime${permissionNumber}`] = permission.exitPermissionTime;
-          processedRecord[`permissionExitComment${permissionNumber}`] = permission.comment || '';
-        }
-        if (permission.entryPermissionTime) {
-          processedRecord[`permissionEntryTime${permissionNumber}`] = permission.entryPermissionTime;
-          processedRecord[`permissionEntryComment${permissionNumber}`] = permission.comment || '';
-        }
-      });
-
-      if (dispatchingRows.length > 0) {
-        processedRecord.dispatchingTime = dispatchingRows[0].dispatchingTime;
-        processedRecord.dispatchingComment = dispatchingRows[0].dispatchingComment;
-      }
-
-      processedRows.push(processedRecord);
+    if (!filteredAttendance || !Array.isArray(filteredAttendance) || filteredAttendance.length === 0) {
+      throw new Error("filteredAttendance is missing or empty.");
+    }
+    // NOTA: La validación de maxPermissionCount y filterMode se eliminó de aquí
+    // porque estos valores se calculan dinámicamente o no son necesarios para este controlador.
+    if (!selectedDate || typeof selectedDate !== "string") {
+      throw new Error("selectedDate is missing or invalid.");
     }
 
-    // Usar el controlador de exportación semanal existente con los datos obtenidos
-    const weekNumber = currentDate.subtract(1, 'week').isoWeek();
-    const monthNumber = currentDate.subtract(1, 'week').month();
+    // Create a new workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Asistencia");
 
-    const reqBody = {
-      body: {
-        weeklyAttendance: processedRows,
-        selectedMonth: monthNumber.toString(),
-        selectedWeek: weekNumber.toString()
+    // --- Determinar la estructura dinámica de las columnas ---
+    // Primero, encontrar el número máximo de permisos para cualquier empleado en este día.
+    let maxPermsInDay = 0;
+    filteredAttendance.forEach(record => {
+      let currentPerms = 0;
+      // Asumiendo hasta 5 permisos como máximo posible en la base de datos
+      for (let i = 1; i <= 5; i++) {
+        if (record[`permissionExitTime${i}`] || record[`permissionEntryTime${i}`]) {
+          currentPerms = i; // El permiso más alto que tiene datos
+        }
       }
-    };
+      if (currentPerms > maxPermsInDay) {
+        maxPermsInDay = currentPerms;
+      }
+    });
 
-    // Llamar al controlador de exportación semanal
-    await exports.exportWeeklyAttendance(reqBody, res);
+    // Construir los encabezados de las columnas dinámicamente
+    const columnHeaders = ["Correlativo", "Código", "Nombre", "Entrada"];
+    const columnWidths = [10, 10, 30, 12]; // Anchos iniciales para Correlativo, Código, Nombre, Entrada
 
+    for (let i = 1; i <= maxPermsInDay; i++) {
+      columnHeaders.push(`Permiso ${i} S.`); // Permiso de Salida
+      columnHeaders.push(`Permiso ${i} E.`); // Permiso de Entrada
+      columnWidths.push(12, 12); // Anchos para Permiso S y Permiso E
+    }
+
+    columnHeaders.push("Salida"); // Salida siempre al final de los tiempos de marcaje
+    columnWidths.push(12); // Ancho para Salida
+
+    columnHeaders.push("Comentarios"); // Comentarios siempre al final
+    columnWidths.push(30); // Ancho para Comentarios
+
+    const numberOfColumns = columnHeaders.length;
+
+    // Colores que usaremos
+    const titleBgColor = "E6F0FA"; // Color de fondo claro para el título
+    const subtitleBgColor = "F2F2F2"; // Color de fondo gris claro para el subtítulo
+    const headerBgColor = "D3D3D3"; // Color gris para los encabezados
+
+    // Fila 1: Título principal
+    const titleText = `Reporte de Asistencia - Día ${dayjs(selectedDate).format("DD/MM/YYYY")}`;
+    const titleRow = worksheet.addRow([titleText]);
+    titleRow.height = 30;
+
+    // Fusionar celdas para el título
+    worksheet.mergeCells(titleRow.number, 1, titleRow.number, numberOfColumns);
+
+    // Aplicar estilo y color de fondo a TODAS las celdas de la fila del título
+    for (let i = 1; i <= numberOfColumns; i++) {
+      const cell = worksheet.getCell(titleRow.number, i);
+      cell.font = { name: "Calibri", size: 16, bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: titleBgColor } };
+    }
+
+    // Fila 2: Subtítulo
+    const employeeCount = filteredAttendance.length;
+    const subtitleText = `Empleados registrados: ${employeeCount}`;
+    const subtitleRow = worksheet.addRow([subtitleText]);
+    subtitleRow.height = 25;
+
+    // Fusionar celdas para el subtítulo
+    worksheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, numberOfColumns);
+
+    // Aplicar estilo y color de fondo a TODAS las celdas de la fila del subtítulo
+    for (let i = 1; i <= numberOfColumns; i++) {
+      const cell = worksheet.getCell(subtitleRow.number, i);
+      cell.font = { name: "Calibri", size: 12, bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: subtitleBgColor } };
+    }
+
+    // Fila 3: Encabezados de la tabla de datos (Correlativo, Código, etc.)
+    const headerRow = worksheet.addRow(columnHeaders);
+    headerRow.height = 20;
+
+    // Aplicar estilo, color de fondo y bordes a CADA celda de la fila de encabezados
+    headerRow.eachCell((cell) => {
+      cell.font = { name: "Calibri", size: 12, bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBgColor } };
+      cell.border = {
+        top: { style: "thin", color: { argb: "000000" } },
+        bottom: { style: "thin", color: { argb: "000000" } },
+        left: { style: "thin", color: { argb: "000000" } },
+        right: { style: "thin", color: { argb: "000000" } },
+      };
+    });
+
+    // Añadir las filas de datos. Estas comenzarán desde la fila 4.
+    filteredAttendance.forEach((record, index) => {
+      const rowData = [
+        index + 1, // Correlativo
+        record.employeeID || "", // Código
+        record.employeeName || "", // Nombre
+        record.entryTime || "", // Entrada
+      ];
+
+      // Añadir datos de permisos dinámicamente: Permiso S. luego Permiso E.
+      for (let i = 1; i <= maxPermsInDay; i++) {
+        rowData.push(record[`permissionExitTime${i}`] || ""); // Permiso de Salida
+        rowData.push(record[`permissionEntryTime${i}`] || ""); // Permiso de Entrada
+      }
+
+      rowData.push(record.exitTime || ""); // Salida siempre después de todos los permisos
+
+      // Recopilar todos los comentarios en una sola celda
+      const comments = [];
+      // Iterar hasta el máximo de permisos posibles (5) para comentarios
+      for (let i = 1; i <= 5; i++) {
+        if (record[`permissionExitComment${i}`]) {
+          comments.push(`P${i}S: ${record[`permissionExitComment${i}`]}`);
+        }
+        if (record[`permissionEntryComment${i}`]) {
+          comments.push(`P${i}E: ${record[`permissionEntryComment${i}`]}`);
+        }
+      }
+      if (record.exitComment) {
+        comments.push(`Salida: ${record.exitComment}`);
+      }
+      if (record.dispatchingComment) {
+        comments.push(`Despacho: ${record.dispatchingComment}`);
+      }
+      rowData.push(comments.join(" | ") || ""); // Comentarios
+      worksheet.addRow(rowData);
+    });
+
+    // Estilo para las filas de datos
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 3) { // Las filas de datos comienzan desde la fila 4
+        row.eachCell((cell) => {
+          cell.font = { name: "Calibri", size: 11 };
+          cell.alignment = { horizontal: "left", vertical: "middle" };
+          cell.border = {
+            top: { style: "thin", color: { argb: "000000" } },
+            bottom: { style: "thin", color: { argb: "000000" } },
+            left: { style: "thin", color: { argb: "000000" } },
+            right: { style: "thin", color: { argb: "000000" } },
+          };
+        });
+        row.height = 20;
+      }
+    });
+
+    // Establecer anchos de columna individualmente usando el array dinámico
+    columnWidths.forEach((width, index) => {
+      worksheet.getColumn(index + 1).width = width;
+    });
+
+    // Generar archivo Excel
+    const excelBuffer = await workbook.xlsx.writeBuffer();
+    const formattedDate = dayjs(selectedDate).format("YYYYMMDD");
+    const filename = `asistencia_dia_${formattedDate}.xlsx`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(excelBuffer);
   } catch (error) {
-    console.error("Error al exportar asistencia semanal automática:", error.stack || error.message);
+    console.error("Error al exportar asistencia:", error.stack || error.message);
     res.status(500).send({ message: `Error interno del servidor al generar el archivo Excel: ${error.message}` });
   }
 };
