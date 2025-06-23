@@ -66,7 +66,7 @@ exports.getAllPermissions = async (req, res) => {
             INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
             INNER JOIN employees_emp e on e.employeeID = pa.employeeID
             INNER JOIN jobs_emp j on e.jobID = j.jobID
-    where pa.date = DATE(NOW()) and IsApproved
+    where pa.date = DATE(NOW())
     ORDER BY pa.permissionID desc;
     `);
     res.json(results);
