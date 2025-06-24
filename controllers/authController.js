@@ -14,7 +14,7 @@ exports.login = async (req, res) => {
     }
 
     try {
-        // 1. Buscar el usuario en la base de datos y obtener su estado, incluyendo failedLoginAttemps
+        // 1. Buscar el usuario en la base de datos y obtener su estado
         const [rows] = await db.query(
             `SELECT
                 u.*,
@@ -29,7 +29,6 @@ exports.login = async (req, res) => {
         );
 
         if (rows.length === 0) {
-            // Si no se encuentra el usuario, las credenciales son inválidas.
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
@@ -39,7 +38,6 @@ exports.login = async (req, res) => {
         const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
         if (!isPasswordValid) {
-            // Si la contraseña no es válida, incrementamos failedLoginAttemps
             const newFailedAttempts = (user.failedLoginAttemps || 0) + 1;
             await db.query(
                 'UPDATE users_us SET failedLoginAttemps = ? WHERE userID = ?',
@@ -49,13 +47,12 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
-        // 3. Verificar si el usuario está activo basándose en el 'statusName'
+        // 3. Verificar si el usuario está activo
         if (user.statusName !== 'Activo') {
             return res.status(403).json({ message: 'Tu cuenta está inactiva. Contacta al administrador.' });
         }
 
-        // 4. Si las credenciales son válidas y el usuario está activo:
-        // Resetear failedLoginAttemps a 0
+        // 4. Resetear failedLoginAttemps a 0
         if (user.failedLoginAttemps > 0) {
             await db.query(
                 'UPDATE users_us SET failedLoginAttemps = 0 WHERE userID = ?',
@@ -64,8 +61,7 @@ exports.login = async (req, res) => {
             console.log(`Intentos de login fallidos reseteados para ${username}.`);
         }
 
-        // 5. Fetch associated countries and companies for the user using usercompany_us
-        // Esto se basará en tu query que ya tienes.
+        // 5. Fetch associated countries and companies
         const [userCompaniesAndCountries] = await db.query(
             `SELECT DISTINCT
                 co.countryID,
@@ -84,9 +80,7 @@ exports.login = async (req, res) => {
             [user.userID]
         );
 
-        // Estructurar los datos para el frontend: un array de países, cada uno con sus compañías.
         const countriesMap = new Map();
-
         userCompaniesAndCountries.forEach(row => {
             if (!countriesMap.has(row.countryID)) {
                 countriesMap.set(row.countryID, {
@@ -108,10 +102,9 @@ exports.login = async (req, res) => {
         const token = jwt.sign(
             { id: user.userID, username: user.username, role: user.role, status: user.statusName },
             JWT_SECRET,
-            { expiresIn: '1h' }
+            { expiresIn: '24h' } // Increased to 24 hours for longer session
         );
 
-        // Devolver el token, user info, y la data de países/compañías
         res.status(200).json({
             message: 'Inicio de sesión exitoso.',
             token,
@@ -120,7 +113,7 @@ exports.login = async (req, res) => {
                 username: user.username,
                 role: user.role,
                 status: user.statusName,
-                associatedLocations: associatedLocations // Enviar la estructura deseada
+                associatedLocations: associatedLocations
             }
         });
 
