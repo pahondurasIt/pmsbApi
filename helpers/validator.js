@@ -6,7 +6,7 @@ const isValidNumber = (value) => {
 const isValidString = (value) => {
     return (value === null || value === undefined || value.trim() === '') ?
         false : true
-}  
+}
  
 module.exports = {
     isValidNumber,

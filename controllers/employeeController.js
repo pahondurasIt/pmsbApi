@@ -5,6 +5,7 @@ const fs = require('fs'); // 👈 esta línea es obligatoria
 const path = require('path');
 const { camposAuditoriaADD, camposAuditoriaUPDATE } = require('../helpers/columnasAuditoria');
 const { isValidNumber, isValidString } = require('../helpers/validator');
+const { formatNamePart } = require('../helpers/formateador');
 
 // Configuración de almacenamiento con nombre personalizado
 const storage = multer.diskStorage({
@@ -69,7 +70,7 @@ exports.getEmployeeByID = async (req, res) => {
         e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
         e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
         e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt,
-        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName,
+        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName, e.line,
         e.companyID, com.companyName, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
         e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName,
         e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep, sup.empSupervisorID, sup.supervisorID,
@@ -199,25 +200,23 @@ exports.createEmployee = async (req, res) => {
     if (correlative.length === 0) {
       return res.status(500).json({ message: 'Error al obtener el correlativo' });
     }
-    console.log(req.body.employeeData);
-
     const [result] = await db.query(
       `INSERT INTO employees_emp (
           codeEmployee, firstName, middleName, lastName, secondLastName, phoneNumber, genderID, docID, docNumber, photoUrl,
           birthDate, bloodTypeID, cityID, stateID, sectorID, suburbID, address, gabachSize, shirtSize, divisionID,
-          departmentID, areaID, jobID, hireDate, endDate, isActive, partnerName, partnerage, companyID,
+          departmentID, areaID, jobID, line, hireDate, endDate, isActive, partnerName, partnerage, companyID,
           contractTypeID, payrollTypeID, shiftID, educationLevelID, educationGrade, transportTypeID, maritalStatusID, nationality,
           evaluationStep, incapacitated, salary, relatives, createdDate, createdBy, updatedDate, updatedBy
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [correlative[0].lastUsed + 1, req.body.employeeData.firstName, req.body.employeeData.middleName,
-      req.body.employeeData.lastName, req.body.employeeData.secondLastName, req.body.employeeData.phoneNumber,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
+      [correlative[0].lastUsed + 1, formatNamePart(req.body.employeeData.firstName), formatNamePart(req.body.employeeData.middleName),
+      formatNamePart(req.body.employeeData.lastName), formatNamePart(req.body.employeeData.secondLastName), req.body.employeeData.phoneNumber,
       req.body.employeeData.genderID, req.body.employeeData.docID, req.body.employeeData.docNumber, req.body.employeeData.photoUrl,
       dayjs(req.body.employeeData.birthDate).format('YYYY-MM-DD'), req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID,
       req.body.employeeData.stateID.stateID, req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID,
       req.body.employeeData.address, req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID,
       req.body.employeeData.divisionID.divisionID, req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID,
-      req.body.employeeData.jobID.jobID, dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'),
+      req.body.employeeData.jobID.jobID, req.body.employeeData.line, dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'),
       isValidString(req.body.employeeData.endDate) ? isValidString(req.body.employeeData.endDate).format('YYYY-MM-DD') : null,
       req.body.employeeData.isActive, req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
       req.body.employeeData.companyID, req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID,
@@ -259,8 +258,9 @@ exports.createEmployee = async (req, res) => {
             updatedDate,
             updatedBy
             )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? )`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
-      x.birthDate, x.birthCert, x.genderID, employeeID, camposAuditoriaADD]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? )`, [formatNamePart(x.firstName), formatNamePart(x.middleName),
+      formatNamePart(x.lastName), formatNamePart(x.secondLastName),
+      dayjs(x.birthDate).format('YYYY-MM-DD'), x.birthCert, x.genderID, employeeID, camposAuditoriaADD]);
     });
 
     req.body.familyList.forEach(async x => {
@@ -301,7 +301,8 @@ exports.createEmployee = async (req, res) => {
             updatedDate,
             updatedBy
             )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [formatNamePart(x.firstName), formatNamePart(x.middleName),
+      formatNamePart(x.lastName), formatNamePart(x.secondLastName),
       x.stateID, x.cityID, x.sectorID, x.suburbID,
       x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoriaADD]);
     });
@@ -318,7 +319,7 @@ exports.createEmployee = async (req, res) => {
             updatedDate,
             updatedBy
             )
-        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, employeeID, x.employeeID?.employeeID, camposAuditoriaADD]);
+        VALUES (?, ?, ?, ?)`, [x.relativesTypeID, employeeID, x.employeeID, camposAuditoriaADD]);
       });
     }
 
@@ -338,7 +339,8 @@ exports.createEmployee = async (req, res) => {
             updatedDate,
             updatedBy
             )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [x.firstName, x.middleName, x.lastName, x.secondLastName, x.percentage,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [formatNamePart(x.firstName), formatNamePart(x.middleName),
+      formatNamePart(x.lastName), formatNamePart(x.secondLastName), parseInt(x.percentage),
       x.relativesTypeID, x.phoneNumber, employeeID, camposAuditoriaADD]);
     });
 
@@ -363,6 +365,28 @@ exports.createEmployee = async (req, res) => {
   }
 };
 
+// Obtener todos los empleados
+exports.getSupervisorByDepto = async (req, res) => {
+  try {
+    const [supervisores] = await db.query(
+      `
+       select e.employeeID supervisorID, concat(e.firstName,' ',
+        e.middleName,' ',e.lastName ,' ', e.secondLastName) supervisorName
+        from pmsb.employees_emp e
+          inner join pmsb.jobs_emp j on e.jobID = j.jobID
+          inner join pmsb.department_emp d on d.departmentID = e.departmentID 
+        where e.companyID = 1 and e.isActive = 1 and j.departmentID = ${req.params.departmentID}
+        and j.jobName like 'Supervisor%' ;
+      `
+    );
+
+    res.json(supervisores);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener datos de empleados' });
+  }
+};
+
 exports.updateEmployee = async (req, res) => {
   try {
     const { employeeID } = req.params;
@@ -378,20 +402,20 @@ exports.updateEmployee = async (req, res) => {
           bloodTypeID = ?, cityID = ?, stateID = ?,
           sectorID = ?, suburbID = ?, address = ?,
           gabachSize = ?, shirtSize = ?, divisionID = ?,
-          departmentID = ?, areaID = ?, jobID = ?,
+          departmentID = ?, areaID = ?, jobID = ?,line = ?,
           hireDate = ?, partnerName = ?, partnerage = ?,
           contractTypeID = ?, payrollTypeID = ?, shiftID = ?,
           educationLevelID = ?, educationGrade = ?, transportTypeID = ?,
           maritalStatusID = ?, nationality = ?, salary = ?,
           relatives = ?, updatedDate = ?, updatedBy = ?
       WHERE employeeID = ?`,
-      [req.body.employeeData.firstName, req.body.employeeData.middleName, req.body.employeeData.lastName,
-      req.body.employeeData.secondLastName, req.body.employeeData.phoneNumber, req.body.employeeData.genderID,
+      [formatNamePart(req.body.employeeData.firstName), formatNamePart(req.body.employeeData.middleName), formatNamePart(req.body.employeeData.lastName),
+      formatNamePart(req.body.employeeData.secondLastName), req.body.employeeData.phoneNumber, req.body.employeeData.genderID,
       req.body.employeeData.docID, req.body.employeeData.docNumber, dayjs(req.body.employeeData.birthDate).format('YYYY-MM-DD'),
       req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID, req.body.employeeData.stateID.stateID,
       req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID, req.body.employeeData.address,
       req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID, req.body.employeeData.divisionID.divisionID,
-      req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID, req.body.employeeData.jobID.jobID,
+      req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID, req.body.employeeData.jobID.jobID, req.body.employeeData.line,
       dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'), req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
       req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID, req.body.employeeData.shiftID,
       req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade, req.body.employeeData.transportTypeID,
@@ -490,8 +514,9 @@ exports.addChild = async (req, res) => {
       `INSERT INTO children_emp (
           firstName, middleName, lastName, secondLastName, birthDate, birthCert,
           genderID, employeeID, createdDate, createdBy, updatedDate, updatedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName, secondLastName,
-      dayjs(birthDate).format('YYYY-MM-DD'), birthCert, genderID, req.params.employeeID, camposAuditoriaADD]
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [formatNamePart(firstName), formatNamePart(middleName),
+    formatNamePart(lastName), formatNamePart(secondLastName),
+    dayjs(birthDate).format('YYYY-MM-DD'), birthCert, genderID, req.params.employeeID, camposAuditoriaADD]
     );
     res.json({ childrenID: result.insertId });
   } catch (error) {
@@ -519,7 +544,7 @@ exports.updateChild = async (req, res) => {
           updatedDate = ?,
           updatedBy = ?
         WHERE childrenID = ?`,
-      [firstName, middleName, lastName, secondLastName, dayjs(birthDate).format('YYYY-MM-DD'), birthCert,
+      [formatNamePart(firstName), formatNamePart(middleName), formatNamePart(lastName), formatNamePart(secondLastName), dayjs(birthDate).format('YYYY-MM-DD'), birthCert,
         genderID, ...camposAuditoriaUPDATE, req.params.childrenID]
     );
     res.json({ message: 'Hijo actualizado correctamente' });
@@ -549,8 +574,8 @@ exports.addFamilyInfo = async (req, res) => {
       `INSERT INTO familyinformation_emp (
           relativesTypeID, firstName, middleName, lastName, secondLastName, age,
           employeeID, createdDate, createdBy, updatedDate, updatedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [relativesTypeID, firstName, middleName,
-      lastName, secondLastName, age, req.params.employeeID, camposAuditoriaADD]
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [relativesTypeID, formatNamePart(firstName), formatNamePart(middleName),
+      formatNamePart(lastName), formatNamePart(secondLastName), age, req.params.employeeID, camposAuditoriaADD]
     );
     res.json({ familyInfoID: result.insertId });
   } catch (error) {
@@ -577,7 +602,7 @@ exports.updateFamilyInfo = async (req, res) => {
           updatedDate = ?,
           updatedBy = ?
         WHERE familyInfoID = ?`,
-      [relativesTypeID, firstName, middleName, lastName, secondLastName, age,
+      [relativesTypeID, formatNamePart(firstName), formatNamePart(middleName), formatNamePart(lastName), formatNamePart(secondLastName), age,
         ...camposAuditoriaUPDATE, req.params.familyInfoID]
     );
     res.json({ message: 'Información familiar actualizada correctamente' });
@@ -612,9 +637,9 @@ exports.addEContact = async (req, res) => {
           firstName, middleName, lastName, secondLastName, stateID, cityID,
           sectorID, suburbID, relativesTypeID, phoneNumber,
           employeeID, createdDate, createdBy, updatedDate, updatedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName,
-      secondLastName, stateID, cityID, sectorID, suburbID, relativesTypeID, phoneNumber,
-      req.params.employeeID, camposAuditoriaADD]
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [formatNamePart(firstName), formatNamePart(middleName), formatNamePart(lastName),
+    formatNamePart(secondLastName), stateID, cityID, sectorID, suburbID, relativesTypeID, phoneNumber,
+    req.params.employeeID, camposAuditoriaADD]
     );
     res.json({ econtactID: result.insertId });
   } catch (error) {
@@ -638,7 +663,7 @@ exports.updateEContact = async (req, res) => {
           sectorID = ?, suburbID = ?, relativesTypeID = ?,
           phoneNumber = ?, updatedDate = ?, updatedBy = ?
         WHERE econtactID = ?`,
-      [firstName, middleName, lastName, secondLastName, stateID, cityID, sectorID,
+      [formatNamePart(firstName), formatNamePart(middleName), formatNamePart(lastName), formatNamePart(secondLastName), stateID, cityID, sectorID,
         suburbID, relativesTypeID, phoneNumber, ...camposAuditoriaUPDATE, req.params.econtactID]
     );
     res.json({ message: 'Contacto de emergencia actualizado correctamente' });
@@ -738,9 +763,9 @@ exports.addBeneficiaryInfo = async (req, res) => {
           firstName, middleName, lastName, secondLastName, percentage,
           relativesTypeID, phoneNumber, employeeID,
           createdDate, createdBy, updatedDate, updatedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [firstName, middleName, lastName,
-      secondLastName, percentage, relativesTypeID, phoneNumber,
-      req.params.employeeID, camposAuditoriaADD]
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [formatNamePart(firstName), formatNamePart(middleName), formatNamePart(lastName),
+    formatNamePart(secondLastName), parseInt(percentage), relativesTypeID, phoneNumber,
+    req.params.employeeID, camposAuditoriaADD]
     );
     res.json({ beneficiaryID: result.insertId });
   } catch (error) {
