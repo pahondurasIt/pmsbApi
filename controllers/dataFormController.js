@@ -23,13 +23,6 @@ exports.getDataForm = async (req, res) => {
     const [payrollType] = await db.query('SELECT payrollTypeID, payrollName FROM payrolltype_emp where companyID = 1');
     const [shifts] = await db.query('SELECT shiftID, shiftName FROM shifts_emp where companyID = 1');
     const [correlative] = await db.query('SELECT lastUsed FROM pmsb.correlative where companyID = 1 and correlativeID = 1');
-    const [supervisors] = await db.query(`
-      select e.employeeID supervisorID, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) supervisorName
-        from pmsb.employees_emp e
-          inner join pmsb.jobs_emp j on  e.jobID = j.jobID
-        where j.jobName like 'Supervisor%' and e.companyID = 1 and e.isActive = 1;
-            `);
-
 
     res.json({
       bloodTypes,
@@ -51,7 +44,6 @@ exports.getDataForm = async (req, res) => {
       contractType,
       payrollType,
       shifts,
-      supervisors,
       correlative: correlative[0].lastUsed
     });
   } catch (error) {
