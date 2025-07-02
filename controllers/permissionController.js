@@ -143,8 +143,8 @@ exports.authorizePermission = async (req, res) => {
       employeeID,
       permissionType,
       currentDateOnly,
-      dayjs(exitTimePermission).format("HH:mm"),     // NUEVO: Hora de salida
-      dayjs(entryTimePermission).format("HH:mm"),    // NUEVO: Hora de entrada de regreso
+      dayjs(exitTimePermission).tz("America/Tegucigalpa").format('HH:mm').toString(),     // NUEVO: Hora de salida
+      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),    // NUEVO: Hora de entrada de regreso
       commentValue,
       isPaidValue,
       isApprovedValue,

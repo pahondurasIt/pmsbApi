@@ -613,8 +613,6 @@ exports.exportAttendance = async (req, res) => {
   try {
     const { filteredAttendance, selectedDate } = req.body;
 
-    console.log("Export Attendance Payload:", { filteredAttendance, selectedDate });
-
     if (!filteredAttendance || !Array.isArray(filteredAttendance) || filteredAttendance.length === 0) {
       throw new Error("filteredAttendance is missing or empty.");
     }
@@ -772,12 +770,6 @@ exports.exportAttendance = async (req, res) => {
 exports.exportWeeklyAttendance = async (req, res) => {
   try {
     const { weeklyAttendance, selectedMonth, selectedWeek } = req.body;
-
-    console.log("Export Weekly Attendance Payload:", {
-      weeklyAttendance,
-      selectedMonth,
-      selectedWeek,
-    });
 
     if (!weeklyAttendance || !Array.isArray(weeklyAttendance)) {
       throw new Error("weeklyAttendance is missing or invalid.");
@@ -1086,8 +1078,6 @@ exports.exportWeeklyAttendanceAuto = async (req, res) => {
     const currentDate = dayjs().tz("America/Tegucigalpa");
     const startOfWeek = currentDate.subtract(1, 'week').startOf("isoWeek").format("YYYY-MM-DD");
     const endOfWeek = currentDate.subtract(1, 'week').endOf("isoWeek").format("YYYY-MM-DD");
-
-    console.log("Auto Export Weekly Attendance:", { startOfWeek, endOfWeek });
 
     const attendanceQuery = `
       SELECT 

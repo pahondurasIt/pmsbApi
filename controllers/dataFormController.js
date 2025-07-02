@@ -19,6 +19,7 @@ exports.getDataForm = async (req, res) => {
     const [areas] = await db.query('SELECT areaID, areaName, divisionID FROM area_emp where companyID = 1');
     const [departments] = await db.query('SELECT departmentID, departmentName, areaID FROM department_emp where companyID = 1');
     const [jobs] = await db.query('SELECT jobID, jobName, departmentID FROM jobs_emp where companyID = 1');
+    const [employeeType] = await db.query('SELECT employeeTypeID, employeeTypeDesc FROM pmsb.employeetype_emp where companyID = 1');
     const [contractType] = await db.query('SELECT contractTypeID, statusDesc FROM contracttype_emp where companyID = 1');
     const [payrollType] = await db.query('SELECT payrollTypeID, payrollName FROM payrolltype_emp where companyID = 1');
     const [shifts] = await db.query('SELECT shiftID, shiftName FROM shifts_emp where companyID = 1');
@@ -41,6 +42,7 @@ exports.getDataForm = async (req, res) => {
       areas,
       departments,
       jobs,
+      employeeType,
       contractType,
       payrollType,
       shifts,

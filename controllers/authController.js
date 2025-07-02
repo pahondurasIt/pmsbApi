@@ -43,7 +43,6 @@ exports.login = async (req, res) => {
                 'UPDATE users_us SET failedLoginAttemps = ? WHERE userID = ?',
                 [newFailedAttempts, user.userID]
             );
-            console.log(`Intentos de login fallidos para ${username}: ${newFailedAttempts}`);
             return res.status(401).json({ message: 'Credenciales inválidas.' });
         }
 
@@ -58,7 +57,6 @@ exports.login = async (req, res) => {
                 'UPDATE users_us SET failedLoginAttemps = 0 WHERE userID = ?',
                 [user.userID]
             );
-            console.log(`Intentos de login fallidos reseteados para ${username}.`);
         }
 
         // 5. Fetch associated countries and companies

@@ -70,11 +70,10 @@ exports.getEmployeeByID = async (req, res) => {
         e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
         e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
         e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt,
-        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName, e.line,
-        e.companyID, com.companyName, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
+        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName,
+        e.companyID, com.companyName, et.employeeTypeDesc, et.employeeTypeID, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
         e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName,
-        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep, sup.empSupervisorID, sup.supervisorID,
-        concat(supervisor.firstName,' ',supervisor.middleName,' ',supervisor.lastName ,' ', supervisor.secondLastName) supervisorName,
+        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep,
         e.incapacitated, e.salary, IF(e.relatives, true, false) relatives, e.createdBy, e.createdDate, e.updatedBy, e.updatedDate
       from pmsb.employees_emp e
         inner join pmsb.gender_emp g on g.genderID = e.genderID
@@ -91,14 +90,13 @@ exports.getEmployeeByID = async (req, res) => {
         inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
         inner join pmsb.jobs_emp j on j.jobID = e.jobID
         inner join pmsb.companies_us com on com.companyID = e.companyID
+        inner join pmsb.employeetype_emp et on et.employeeTypeID = e.employeeTypeID
         inner join pmsb.contracttype_emp cont on cont.contractTypeID = e.contractTypeID
         inner join pmsb.payrolltype_emp pay on pay.payrollTypeID = e.payrollTypeID
         INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
         inner join pmsb.educationlevel_emp el on el.educationLevelID = e.educationLevelID
         INNER JOIN pmsb.transportation_emp t on t.transportTypeID = e.transportTypeID
-        INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID
-        left join pmsb.employeesupervisor_emp sup on sup.employeeID = e.employeeID
-		LEFT JOIN pmsb.employees_emp supervisor ON supervisor.employeeID = sup.supervisorID
+        INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID     
       WHERE e.employeeID = ${employeeID};`
     );
 
@@ -204,9 +202,9 @@ exports.createEmployee = async (req, res) => {
       `INSERT INTO employees_emp (
           codeEmployee, firstName, middleName, lastName, secondLastName, phoneNumber, genderID, docID, docNumber, photoUrl,
           birthDate, bloodTypeID, cityID, stateID, sectorID, suburbID, address, gabachSize, shirtSize, divisionID,
-          departmentID, areaID, jobID, line, hireDate, endDate, isActive, partnerName, partnerage, companyID,
-          contractTypeID, payrollTypeID, shiftID, educationLevelID, educationGrade, transportTypeID, maritalStatusID, nationality,
-          evaluationStep, incapacitated, salary, relatives, createdDate, createdBy, updatedDate, updatedBy
+          departmentID, areaID, jobID, hireDate, endDate, isActive, partnerName, partnerage, companyID,
+          employeeTypeID, contractTypeID, payrollTypeID, shiftID, educationLevelID, educationGrade, transportTypeID, 
+          maritalStatusID, nationality, evaluationStep, incapacitated, salary, relatives, createdDate, createdBy, updatedDate, updatedBy
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
       [correlative[0].lastUsed + 1, formatNamePart(req.body.employeeData.firstName), formatNamePart(req.body.employeeData.middleName),
@@ -216,10 +214,10 @@ exports.createEmployee = async (req, res) => {
       req.body.employeeData.stateID.stateID, req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID,
       req.body.employeeData.address, req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID,
       req.body.employeeData.divisionID.divisionID, req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID,
-      req.body.employeeData.jobID.jobID, req.body.employeeData.line, dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'),
+      req.body.employeeData.jobID.jobID, dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'),
       isValidString(req.body.employeeData.endDate) ? isValidString(req.body.employeeData.endDate).format('YYYY-MM-DD') : null,
       req.body.employeeData.isActive, req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
-      req.body.employeeData.companyID, req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID,
+      req.body.employeeData.companyID, req.body.employeeData.employeeTypeID, req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID,
       req.body.employeeData.shiftID, req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade,
       req.body.employeeData.transportTypeID, req.body.employeeData.maritalStatusID, req.body.employeeData.nationality,
       req.body.employeeData.evaluationStep, req.body.employeeData.incapacitated, req.body.employeeData.salary,
@@ -228,19 +226,6 @@ exports.createEmployee = async (req, res) => {
     await db.query(`UPDATE correlative SET lastUsed = ${correlative[0].lastUsed + 1}  WHERE (correlativeID = 1)`);
 
     const employeeID = result.insertId;
-
-    if (isValidString(req.body.employeeData.supervisor?.supervisorName)) {
-      await db.query(
-        `INSERT INTO employeesupervisor_emp (
-            employeeID,
-            supervisorID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
-          ) VALUES (?, ?, ?)`, [employeeID, req.body.employeeData.supervisor?.supervisorID, camposAuditoriaADD]);
-
-    }
 
     req.body.childrenList.forEach(async x => {
       await db.query(
@@ -402,9 +387,9 @@ exports.updateEmployee = async (req, res) => {
           bloodTypeID = ?, cityID = ?, stateID = ?,
           sectorID = ?, suburbID = ?, address = ?,
           gabachSize = ?, shirtSize = ?, divisionID = ?,
-          departmentID = ?, areaID = ?, jobID = ?,line = ?,
+          departmentID = ?, areaID = ?, jobID = ?,
           hireDate = ?, partnerName = ?, partnerage = ?,
-          contractTypeID = ?, payrollTypeID = ?, shiftID = ?,
+          employeeTypeID =?, contractTypeID = ?, payrollTypeID = ?, shiftID = ?,
           educationLevelID = ?, educationGrade = ?, transportTypeID = ?,
           maritalStatusID = ?, nationality = ?, salary = ?,
           relatives = ?, updatedDate = ?, updatedBy = ?
@@ -415,41 +400,14 @@ exports.updateEmployee = async (req, res) => {
       req.body.employeeData.bloodTypeID, req.body.employeeData.cityID.cityID, req.body.employeeData.stateID.stateID,
       req.body.employeeData.sectorID.sectorID, req.body.employeeData.suburbID.suburbID, req.body.employeeData.address,
       req.body.employeeData.gabachSize.sizeID, req.body.employeeData.shirtSize.sizeID, req.body.employeeData.divisionID.divisionID,
-      req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID, req.body.employeeData.jobID.jobID, req.body.employeeData.line,
+      req.body.employeeData.departmentID.departmentID, req.body.employeeData.areaID.areaID, req.body.employeeData.jobID.jobID,
       dayjs(req.body.employeeData.hireDate).format('YYYY-MM-DD'), req.body.employeeData.partnerName, parseInt(req.body.employeeData.partnerage),
-      req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID, req.body.employeeData.shiftID,
+      req.body.employeeData.employeeTypeID, req.body.employeeData.contractTypeID, req.body.employeeData.payrollTypeID, req.body.employeeData.shiftID,
       req.body.employeeData.educationLevelID, req.body.employeeData.educationGrade, req.body.employeeData.transportTypeID,
       req.body.employeeData.maritalStatusID, req.body.employeeData.nationality, req.body.employeeData.salary,
       req.body.employeeData.relatives, ...camposAuditoriaUPDATE, employeeID]
     );
-    //Actualizacion si tenia supervisor y se cambio
-    if (isValidNumber(req.body.employeeData.supervisor?.supervisorID) && isValidNumber(req.body.empSupervisorID)) {
-      //Actualizar supervisor
-      const [empSupervisor] = await db.query(
-        `UPDATE employeesupervisor_emp
-            SET
-               supervisorID = ?, updatedDate = ?, updatedBy = ?
-            WHERE empSupervisorID = ?`,
-        [req.body.employeeData.supervisor.supervisorID, ...camposAuditoriaUPDATE, req.body.empSupervisorID]
-      );
-    } else if (isValidNumber(req.body.employeeData.supervisor?.supervisorID) && !isValidNumber(req.body.empSupervisorID)) {
-      //Agregar supervisor
-      await db.query(
-        `INSERT INTO employeesupervisor_emp (
-            employeeID,
-            supervisorID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
-          ) VALUES (?, ?, ?, ?, ?, ?)`, [employeeID, req.body.employeeData.supervisor.supervisorID, ...camposAuditoriaADD]);
-    } else if (!isValidNumber(req.body.employeeData.supervisor?.supervisorID) && isValidNumber(req.body.empSupervisorID)) {
-      //Eliminar supervisor
-      await db.query(
-        `DELETE FROM employeesupervisor_emp WHERE empSupervisorID = ?`, [req.body.empSupervisorID]
-      );
-    }
-
+   
     const [employee] = await db.query(
       `SELECT
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
@@ -775,8 +733,6 @@ exports.addBeneficiaryInfo = async (req, res) => {
 }
 exports.updateBeneficiaryInfo = async (req, res) => {
   const { firstName, middleName, lastName, secondLastName, percentage, relativesTypeID, phoneNumber } = req.body;
-
-  console.log(req.body);
 
   if (!isValidNumber(req.params.beneficiaryID)) {
     return res.status(500).json({ message: 'ID de información del beneficiario inválido' });
