@@ -32,6 +32,7 @@ const exportattendanceRoutes = require('./routes/exportattendance');
 const authRoutes = require('./routes/auth');
 const linesRoutes = require('./routes/lines');
 const thermalPrinterRoutes = require('./routes/thermalPrinter');
+const logdispatchingRoutes = require('./routes/logdispatching');
 
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -62,6 +63,7 @@ app.use('/api/exportattendance', exportattendanceRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/lines', linesRoutes);
 app.use('/api/thermalPrinter', thermalPrinterRoutes);
+app.use('/api/logdispatching', logdispatchingRoutes);
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
