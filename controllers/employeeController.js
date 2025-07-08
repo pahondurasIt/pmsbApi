@@ -39,13 +39,14 @@ exports.getEmployees = async (req, res) => {
       `
       SELECT
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
-          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
+          dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive,
+          e.evaluationStep
         FROM employees_emp e
-              inner join pmsb.division_emp di on di.divisionID = e.divisionID
-              inner join pmsb.area_emp a on a.areaID = e.areaID
-              inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN pmsb.division_emp di on di.divisionID = e.divisionID
+              INNER JOIN pmsb.area_emp a on a.areaID = e.areaID
+              INNER JOIN pmsb.department_emp dep on dep.departmentID = e.departmentID
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
-              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+              INNER JOIN pmsb.jobs_emp j on j.jobID = e.jobID
               where e.companyID = 1
               ORDER BY e.employeeID asc;
       `
@@ -69,37 +70,41 @@ exports.getEmployeeByID = async (req, res) => {
     const [employee] = await db.query(
       `select
         e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto,
-        e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl,
-        e.genderID, g.genderName, e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName,
-        e.hireDate, e.endDate, e.isActive, e.partnerName, e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName,
-        e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt,
-        e.divisionID, di.divisionName, e.areaID, a.areaName, e.departmentID, dep.departmentName, e.jobID, j.jobName,
-        e.companyID, com.companyName, et.employeeTypeDesc, et.employeeTypeID, e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName,
-        e.educationLevelID, el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName,
-        e.maritalStatusID, m.maritalStatusName, e.nationality, e.evaluationStep,
-        e.incapacitated, e.salary, IF(e.relatives, true, false) relatives, e.createdBy, e.createdDate, e.updatedBy, e.updatedDate
+        e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl, e.genderID, g.genderName, 
+        e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName, e.hireDate, e.endDate, e.isActive, e.partnerName, 
+        e.partnerage, e.stateID, st.stateName, e.cityID, c.cityName, e.sectorID, se.sectorName, e.suburbID, su.suburbName, e.address, 
+        e.gabachSize, sg.sizeName as gabacha, e.shirtSize, ssh.sizeName as shirt, e.divisionID, di.divisionName, e.areaID, a.areaName, 
+        e.departmentID, dep.departmentName, e.jobID, j.jobName, e.companyID, com.companyName, et.employeeTypeDesc, et.employeeTypeID,
+        e.contractTypeID, cont.statusDesc, e.payrollTypeID, pay.payrollName, e.shiftID, shi.shiftName, e.educationLevelID, 
+        el.educationLevelName, e.educationGrade, e.transportTypeID, t.transportTypeName, e.maritalStatusID, m.maritalStatusName, 
+        e.nationality, e.evaluationStep, e.incapacitated, e.salary, IF(e.relatives, true, false) relatives, e.createdBy, e.createdDate, 
+        e.updatedBy, e.updatedDate, line.linesID, line.linesNumber, line.supervisorID supervisorLine, 
+        concat(sup.firstName,' ',sup.middleName,' ',sup.lastName ,' ', sup.secondLastName) supervisorName
       from pmsb.employees_emp e
-        inner join pmsb.gender_emp g on g.genderID = e.genderID
-        inner join pmsb.doctypes_emp d on d.docID = e.docID
-        inner join pmsb.bloodtype_emp b on b.bloodTypeID = e.bloodTypeID
-        inner join pmsb.states_emp st on st.stateID = e.stateID
-        inner join pmsb.cities_emp c on c.cityID = e.cityID
-        inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
-        inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
-        inner join pmsb.sizes_emp sg on sg.sizeID = e.gabachSize
-        inner join pmsb.sizes_emp ssh on ssh.sizeID = e.shirtSize
-        inner join pmsb.division_emp di on di.divisionID = e.divisionID
-        inner join pmsb.area_emp a on a.areaID = e.areaID
-        inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
-        inner join pmsb.jobs_emp j on j.jobID = e.jobID
-        inner join pmsb.companies_us com on com.companyID = e.companyID
-        inner join pmsb.employeetype_emp et on et.employeeTypeID = e.employeeTypeID
-        inner join pmsb.contracttype_emp cont on cont.contractTypeID = e.contractTypeID
-        inner join pmsb.payrolltype_emp pay on pay.payrollTypeID = e.payrollTypeID
+        INNER JOIN pmsb.gender_emp g on g.genderID = e.genderID
+        INNER JOIN pmsb.doctypes_emp d on d.docID = e.docID
+        INNER JOIN pmsb.bloodtype_emp b on b.bloodTypeID = e.bloodTypeID
+        INNER JOIN pmsb.states_emp st on st.stateID = e.stateID
+        INNER JOIN pmsb.cities_emp c on c.cityID = e.cityID
+        INNER JOIN pmsb.sectors_emp se on se.sectorID = e.sectorID
+        INNER JOIN pmsb.suburbs_emp su on su.suburbID = e.suburbID
+        INNER JOIN pmsb.sizes_emp sg on sg.sizeID = e.gabachSize
+        INNER JOIN pmsb.sizes_emp ssh on ssh.sizeID = e.shirtSize
+        INNER JOIN pmsb.division_emp di on di.divisionID = e.divisionID
+        INNER JOIN pmsb.area_emp a on a.areaID = e.areaID
+        INNER JOIN pmsb.department_emp dep on dep.departmentID = e.departmentID
+        INNER JOIN pmsb.jobs_emp j on j.jobID = e.jobID
+        INNER JOIN pmsb.companies_us com on com.companyID = e.companyID
+        INNER JOIN pmsb.employeetype_emp et on et.employeeTypeID = e.employeeTypeID
+        INNER JOIN pmsb.contracttype_emp cont on cont.contractTypeID = e.contractTypeID
+        INNER JOIN pmsb.payrolltype_emp pay on pay.payrollTypeID = e.payrollTypeID
         INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
-        inner join pmsb.educationlevel_emp el on el.educationLevelID = e.educationLevelID
+        INNER JOIN pmsb.educationlevel_emp el on el.educationLevelID = e.educationLevelID
         INNER JOIN pmsb.transportation_emp t on t.transportTypeID = e.transportTypeID
-        INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID     
+        INNER JOIN pmsb.maritalstatus_emp m on m.maritalStatusID = e.maritalStatusID
+        LEFT JOIN pmsb.employeelines_emp empLine on empLine.employeeID = e.employeeID
+        LEFT JOIN pmsb.lines_emp line on line.linesID = empLine.linesID
+        LEFT JOIN pmsb.employees_emp sup on sup.employeeID = line.supervisorID     
       WHERE e.employeeID = ${employeeID};`
     );
 
@@ -109,7 +114,7 @@ exports.getEmployeeByID = async (req, res) => {
             concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
             f.birthDate, f.birthCert, g.genderName, g.genderID
         from pmsb.children_emp f
-        inner join pmsb.gender_emp g on g.genderID = f.genderID
+        INNER JOIN pmsb.gender_emp g on g.genderID = f.genderID
         where f.employeeID = ${employeeID};
       `);
 
@@ -119,7 +124,7 @@ exports.getEmployeeByID = async (req, res) => {
             concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
             f.age, r.relativesTypeDesc, r.relativesTypeID
           from pmsb.familyinformation_emp f
-          inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
+          INNER JOIN pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
           where f.employeeID = ${employeeID};
       `);
 
@@ -131,11 +136,11 @@ exports.getEmployeeByID = async (req, res) => {
           concat(st.stateName, ', ', c.cityName, ', ', se.sectorName, ', ', su.suburbName) direccion,
           st.stateID, st.stateName, c.cityID, c.cityName, se.sectorID, se.sectorName, su.suburbID, su.suburbName
       from pmsb.econtacts_emp e
-          inner join pmsb.relativestype_emp r on r.relativesTypeID = e.relativesTypeID
-          inner join pmsb.states_emp st on st.stateID = e.stateID
-          inner join pmsb.cities_emp c on c.cityID = e.cityID
-          inner join pmsb.sectors_emp se on se.sectorID = e.sectorID
-          inner join pmsb.suburbs_emp su on su.suburbID = e.suburbID
+          INNER JOIN pmsb.relativestype_emp r on r.relativesTypeID = e.relativesTypeID
+          INNER JOIN pmsb.states_emp st on st.stateID = e.stateID
+          INNER JOIN pmsb.cities_emp c on c.cityID = e.cityID
+          INNER JOIN pmsb.sectors_emp se on se.sectorID = e.sectorID
+          INNER JOIN pmsb.suburbs_emp su on su.suburbID = e.suburbID
       where e.employeeID = ${employeeID};
       `);
 
@@ -145,8 +150,8 @@ exports.getEmployeeByID = async (req, res) => {
           concat(e.codeEmployee,' - ', e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) completeName,
           r.relativesTypeDesc, r.relativesTypeID
         from auxrelative_emp au
-        inner join employees_emp e on e.employeeID = au.employeeID
-          inner join pmsb.relativestype_emp r on r.relativesTypeID = au.relativesTypeID
+        INNER JOIN employees_emp e on e.employeeID = au.employeeID
+          INNER JOIN pmsb.relativestype_emp r on r.relativesTypeID = au.relativesTypeID
         where au.newEmployee = ${employeeID};
       `);
 
@@ -156,7 +161,7 @@ exports.getEmployeeByID = async (req, res) => {
 	      concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) completeName,
         f.percentage, r.relativesTypeDesc, f.relativesTypeID, f.phoneNumber
       from beneficiaries_emp f
-        inner join pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
+        INNER JOIN pmsb.relativestype_emp r on r.relativesTypeID = f.relativesTypeID
       where f.employeeID = ${employeeID};
       `);
 
@@ -420,11 +425,11 @@ exports.createEmployee = async (req, res) => {
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
-              inner join pmsb.division_emp di on di.divisionID = e.divisionID
-              inner join pmsb.area_emp a on a.areaID = e.areaID
-              inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN pmsb.division_emp di on di.divisionID = e.divisionID
+              INNER JOIN pmsb.area_emp a on a.areaID = e.areaID
+              INNER JOIN pmsb.department_emp dep on dep.departmentID = e.departmentID
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
-              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+              INNER JOIN pmsb.jobs_emp j on j.jobID = e.jobID
               where e.employeeID = ${employeeID}
         ORDER BY e.employeeID asc;`
     );
@@ -444,7 +449,7 @@ exports.getSupervisorSewing = async (req, res) => {
         select e.employeeID supervisorID, concat(e.firstName,' ',
         e.middleName,' ',e.lastName ,' ', e.secondLastName) supervisorName
         from pmsb.employees_emp e
-        inner join pmsb.jobs_emp j on e.jobID = j.jobID
+        INNER JOIN pmsb.jobs_emp j on e.jobID = j.jobID
         where e.isActive = 1 and e.jobID = 74;
       `
     );
@@ -456,35 +461,15 @@ exports.getSupervisorSewing = async (req, res) => {
   }
 };
 
-// Obtener todos los empleados de costura
 exports.getEmployeesSewing = async (req, res) => {
   try {
     const [employees] = await db.query(
       `
-        select e.employeeID, concat(e.firstName,' ',
-        e.middleName,' ',e.lastName ,' ', e.secondLastName) employeeName
-        from pmsb.employees_emp e
-        inner join pmsb.jobs_emp j on e.jobID = j.jobID
-        where e.isActive = 1 and j.jobName = 'Costura';
-      `
-    );
-
-    res.json(employees);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error al obtener datos de empleados" });
-  }
-};
-
-exports.getEmployeesSewing = async (req, res) => {
-  try {
-    const [employees] = await db.query(
-      `
-            select e.employeeID, concat(e.firstName,' ', e.middleName,' ',
+        select e.employeeID, concat(e.firstName,' ', e.middleName,' ',
             e.lastName ,' ', e.secondLastName) employeeName, e.photoUrl
         from pmsb.employees_emp e
-          inner join pmsb.jobs_emp j on e.jobID = j.jobID
-          inner join pmsb.department_emp d on d.departmentID = e.departmentID 
+          INNER JOIN pmsb.jobs_emp j on e.jobID = j.jobID
+          INNER JOIN pmsb.department_emp d on d.departmentID = e.departmentID 
         where e.companyID = 1 and e.isActive = 1 and j.jobID = 73;
       `
     );
@@ -564,11 +549,11 @@ exports.updateEmployee = async (req, res) => {
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
-              inner join pmsb.division_emp di on di.divisionID = e.divisionID
-              inner join pmsb.area_emp a on a.areaID = e.areaID
-              inner join pmsb.department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN pmsb.division_emp di on di.divisionID = e.divisionID
+              INNER JOIN pmsb.area_emp a on a.areaID = e.areaID
+              INNER JOIN pmsb.department_emp dep on dep.departmentID = e.departmentID
               INNER JOIN pmsb.shifts_emp shi on shi.shiftID = e.shiftID
-              inner join pmsb.jobs_emp j on j.jobID = e.jobID
+              INNER JOIN pmsb.jobs_emp j on j.jobID = e.jobID
               where e.employeeID = ${employeeID}
         ORDER BY e.employeeID asc;`
     );

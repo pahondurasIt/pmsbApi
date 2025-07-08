@@ -10,7 +10,7 @@ exports.getLines = async (req, res) => {
       `
             SELECT
                 l.linesID, l.linesNumber, 
-                l.supervisorID, e.codeEmployee, concat(e.firstName, " ", e.middleName, " ", e.lastName) AS supervisorName,
+                l.supervisorID, e.codeEmployee, concat(e.firstName, " ", e.middleName, " ", e.lastName, " ", e.secondLastName) AS supervisorName,
                 COUNT(el.employeeID) AS totalEmployees, l.companyID
             FROM
                 pmsb.lines_emp l
@@ -90,7 +90,7 @@ exports.employeesByLine = async (req, res) => {
     const [employees] = await db.query(
       `
             SELECT
-              employeeLinesID, e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName) employeeName,
+              employeeLinesID, e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) employeeName,
               e.employeeID, e.codeEmployee, el.linesID, e.employeeID, e.photoUrl
             FROM
                 pmsb.employeelines_emp  el
@@ -109,10 +109,48 @@ exports.employeesByLine = async (req, res) => {
   }
 };
 
+// Obtener empleados sin línea asignada
+exports.employeesWithoutLine = async (req, res) => {
+  try {
+    const [employeeWithoutLine] = await db.query(
+      `
+        SELECT 
+          e.employeeID, e.codeEmployee,
+          CONCAT(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) AS employeeName
+        FROM 
+            pmsb.employees_emp e
+        LEFT JOIN 
+            pmsb.employeelines_emp el ON e.employeeID = el.employeeID
+        WHERE 
+          e.companyID = 1 and e.isActive = 1 and e.jobID = 73 and el.employeeID IS NULL;
+      `
+    );
+
+    res.json(employeeWithoutLine);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener empleados por línea" });
+  }
+};
+
 // Agregar un empleado a una línea
 exports.addEmployeeToLine = async (req, res) => {
   try {
     const { employeeID, linesID } = req.body;
+    if (!employeeID || !linesID) {
+      return res.status(400).json({ message: "Faltan datos requeridos" });
+    }
+    const [employeeAsignado] = await db.query(
+      `select el.employeeLinesID, el.employeeID, el.linesID, l.linesNumber from pmsb.employeelines_emp el
+        inner join pmsb.lines_emp l on l.linesID = el.linesID where employeeID = ?;`,
+      [employeeID]
+    );
+    if (employeeAsignado.length > 0) {
+      await db.query(
+        `Delete from pmsb.employeelines_emp where employeeID = ?;`,
+        [employeeID]
+      );
+    }
     const [result] = await db.query(
       `
             INSERT INTO pmsb.employeelines_emp (employeeID, linesID, createDate, createBy, updateDate, updateBy)
@@ -122,17 +160,42 @@ exports.addEmployeeToLine = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(400).json({ message: "No se pudo agregar el empleado a la línea" });
+      return res
+        .status(400)
+        .json({ message: "No se pudo agregar el empleado a la línea" });
     }
 
     res.json({
       message: "Empleado agregado a la línea exitosamente",
-      employeeLinesID: result.insertId,
-      employeeID,
-      linesID,
+      employeeAsignado,
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al agregar empleado a la línea" });
   }
-}
+};
+
+// Eliminar un empleado de una línea
+exports.removeEmployeeFromLine = async (req, res) => {
+  try {
+    const { employeeLinesID } = req.params;
+    const [result] = await db.query(
+      `
+            DELETE FROM pmsb.employeelines_emp
+            WHERE employeeLinesID = ?;
+      `,
+      [employeeLinesID]
+    );
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ message: "Empleado no encontrado en la línea" });
+    }
+
+    res.json({ message: "Empleado eliminado de la línea exitosamente" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al eliminar empleado de la línea" });
+  }
+};
