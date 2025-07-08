@@ -33,6 +33,8 @@ const authRoutes = require('./routes/auth');
 const linesRoutes = require('./routes/lines');
 const thermalPrinterRoutes = require('./routes/thermalPrinter');
 const logdispatchingRoutes = require('./routes/logdispatching');
+const formAddTimeRoutes = require('./routes/formaddtime');
+
 
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -64,6 +66,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/lines', linesRoutes);
 app.use('/api/thermalPrinter', thermalPrinterRoutes);
 app.use('/api/logdispatching', logdispatchingRoutes);
+app.use('/api/formaddtime', formAddTimeRoutes);
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);

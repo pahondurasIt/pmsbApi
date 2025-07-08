@@ -330,11 +330,13 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
     const attendanceIDToUpdate = attendanceRecordToUpdate[0].hattendanceID;
 
     const insertDispatchQuery = `
-      INSERT INTO dispatching_emp (employeeID, date, exitTimeComplete, comment)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO dispatching_emp (employeeID, supervisorID, date, exitTimeComplete, comment)
+      VALUES (?, ?, ?, ?, ?)
     `;
+    
+    const supervisorID = req.body.supervisorID || null; // Use supervisorID from request, default to null if not provided
     const comment = 1;
-    const values = [employeeID, currentDateOnly, currentTimeSQL, comment];
+    const values = [employeeID, supervisorID, currentDateOnly, currentTimeSQL, comment];
     const [resultDispatch] = await db.query(insertDispatchQuery, values);
 
     const scheduledExitTimeSQL = `${currentDateOnly} ${shiftEndTimeStr}`;
