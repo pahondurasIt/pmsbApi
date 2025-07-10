@@ -189,7 +189,7 @@ exports.removeEmployeeFromLine = async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res
-        .status(404)
+        .status(500)
         .json({ message: "Empleado no encontrado en la línea" });
     }
 

@@ -271,7 +271,7 @@ exports.updatePermissionComment = async (req, res) => {
     const [result] = await db.query(query, [comment, permissionID]);
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "Permiso no encontrado" });
+      return res.status(500).json({ message: "Permiso no encontrado" });
     }
 
     return res.status(200).json({
@@ -392,7 +392,7 @@ exports.registerAttendance = async (req, res) => {
       [employeeID]
     );
     if (employeeRecords.length === 0) {
-      return res.status(404).json({ message: "Empleado no encontrado. Verifica el ID.", statusType: 'error' });
+      return res.status(500).json({ message: "Empleado no encontrado. Verifica el ID.", statusType: 'error' });
     }
     const employee = employeeRecords[0];
 
