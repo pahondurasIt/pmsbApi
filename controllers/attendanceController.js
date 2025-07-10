@@ -5,6 +5,7 @@ const utc = require("dayjs/plugin/utc"); // Plugin para manejar UTC
 const timezone = require("dayjs/plugin/timezone"); // Plugin para manejar zonas horarias
 const isoWeek = require("dayjs/plugin/isoWeek"); // Plugin para manejar semanas ISO
 const { io } = require('../app'); // Importar la instancia de Socket.IO
+const jwt = require('jsonwebtoken'); // Para decodificar el token JWT
 
 // Extender dayjs con los plugins de UTC, Timezone e ISO Week
 dayjs.extend(utc);
@@ -14,6 +15,100 @@ dayjs.extend(isoWeek);
 // Función auxiliar para formatear la hora con AM/PM
 const formatTimeWithPeriod = (dayjsDate) => {
   return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
+};
+
+// NUEVO: Función auxiliar para obtener el userID del token JWT
+const getUserIdFromToken = (req) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return null;
+    }
+    
+    const token = authHeader.substring(7); // Remover 'Bearer '
+    const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    return decoded.id; // Retorna el userID del token
+  } catch (error) {
+    console.error('Error al decodificar token JWT:', error);
+    return null;
+  }
+};
+
+// NUEVO: Función auxiliar para obtener el nombre de usuario por ID
+const getUsernameById = async (userID) => {
+  try {
+    if (!userID) return 'Usuario desconocido';
+    
+    const [userRows] = await db.query(
+      'SELECT username FROM users_us WHERE userID = ?',
+      [userID]
+    );
+    
+    if (userRows.length > 0) {
+      return userRows[0].username;
+    }
+    
+    return 'Usuario desconocido';
+  } catch (error) {
+    console.error('Error al obtener nombre de usuario:', error);
+    return 'Usuario desconocido';
+  }
+};
+
+// NUEVO: Función auxiliar para registrar ediciones en la tabla attendance_edits_users
+const logAttendanceEdit = async (hattendanceID, field, oldTime, newTime, editedByID) => {
+  try {
+    if (!editedByID) {
+      console.warn('No se pudo registrar la edición: editedByID es null');
+      return;
+    }
+
+    const editDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD HH:mm:ss");
+    
+    const insertQuery = `
+      INSERT INTO attendance_edits_users (hattendanceID, field, oldTime, newTime, editedByID, editDate)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+    
+    await db.query(insertQuery, [hattendanceID, field, oldTime, newTime, editedByID, editDate]);
+    console.log(`Edición registrada: ${field} cambiado de "${oldTime}" a "${newTime}" por usuario ${editedByID}`);
+  } catch (error) {
+    console.error('Error al registrar edición:', error);
+  }
+};
+
+// NUEVO: Función auxiliar para obtener el historial de ediciones con nombres de usuario
+const getEditHistoryWithUsernames = async (hattendanceID) => {
+  try {
+    const query = `
+      SELECT 
+        aeu.field,
+        aeu.oldTime,
+        aeu.newTime,
+        aeu.editDate,
+        aeu.editedByID,
+        u.username as editedByUser
+      FROM attendance_edits_users aeu
+      LEFT JOIN users_us u ON aeu.editedByID = u.userID
+      WHERE aeu.hattendanceID = ?
+      ORDER BY aeu.editDate DESC
+    `;
+    
+    const [editRows] = await db.query(query, [hattendanceID]);
+    
+    return editRows.map(edit => ({
+      field: edit.field,
+      oldTime: edit.oldTime,
+      newTime: edit.newTime,
+      editDate: edit.editDate,
+      editedByUser: edit.editedByUser || 'Usuario desconocido'
+    }));
+  } catch (error) {
+    console.error('Error al obtener historial de ediciones:', error);
+    return [];
+  }
 };
 
 // --- NUEVO: Función auxiliar para obtener un registro de asistencia completo ---
@@ -35,8 +130,12 @@ async function getSingleAttendanceRecord(employeeID, date) {
   if (attendanceRows.length === 0) {
     return null; // No se encontró registro
   }
-  
+
   const attendanceRecord = attendanceRows[0];
+
+  // Obtener historial de ediciones con nombres de usuario
+  const editHistory = await getEditHistoryWithUsernames(attendanceRecord.hattendanceID);
+  attendanceRecord.editHistory = editHistory;
 
   const permissionQuery = `
     SELECT 
@@ -50,7 +149,7 @@ async function getSingleAttendanceRecord(employeeID, date) {
     LIMIT 5;
   `;
   const [permissionRows] = await db.query(permissionQuery, [employeeID, date]);
-  
+
   permissionRows.forEach((permission, index) => {
     const pNum = index + 1;
     attendanceRecord[`permissionExitTime${pNum}`] = permission.exitPermissionTime || null;
@@ -120,7 +219,7 @@ async function checkPendingPermissionReturn(employeeID) {
 async function updatePermissionRecordWithExit(permissionID, currentTime) {
   try {
     const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET exitPermission = ? WHERE permissionID = ?",
+      "UPDATE permissionattendance_emp SET exitPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p') WHERE permissionID = ?",
       [currentTime, permissionID]
     );
     return { success: result.affectedRows > 0 };
@@ -133,7 +232,7 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
 async function updatePermissionRecordWithEntry(permissionID, currentTime) {
   try {
     const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET entryPermission = ?, isApproved = 0 WHERE permissionID = ?",
+      "UPDATE permissionattendance_emp SET entryPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p'), isApproved = 0 WHERE permissionID = ?",
       [currentTime, permissionID]
     );
     return { success: result.affectedRows > 0 };
@@ -176,13 +275,16 @@ exports.getAttendance = async (req, res) => {
     if (conditions.length > 0) {
       attendanceQuery += " WHERE " + conditions.join(" AND ");
     }
-    attendanceQuery += " ORDER BY h.employeeID ASC, h.entryTime ASC"; 
+    attendanceQuery += " ORDER BY h.employeeID ASC, h.entryTime ASC";
 
     const [attendanceRows] = await db.query(attendanceQuery, values);
 
     const processedRows = [];
 
     for (const attendanceRecord of attendanceRows) {
+      // Obtener historial de ediciones con nombres de usuario
+      const editHistory = await getEditHistoryWithUsernames(attendanceRecord.hattendanceID);
+      
       const permissionQuery = `
         SELECT 
           permissionID,
@@ -210,7 +312,7 @@ exports.getAttendance = async (req, res) => {
           DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
           CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
         FROM 
-        dispatching_emp
+          dispatching_emp
         WHERE 
           employeeID = ? 
           AND DATE(date) = ?
@@ -222,7 +324,7 @@ exports.getAttendance = async (req, res) => {
         attendanceRecord.date
       ]);
 
-      const processedRecord = { ...attendanceRecord };
+      const processedRecord = { ...attendanceRecord, editHistory };
 
       permissionRows.forEach((permission, index) => {
         const permissionNumber = index + 1;
@@ -290,7 +392,7 @@ exports.updatePermissionComment = async (req, res) => {
 async function registerDispatchingInternal(req, res, employeeDetails, shiftDetails) {
   const { employeeID } = req.body;
   const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
-  const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD HH:mm:ss");
+  const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD hh:mm:ss A");
   const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
   const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
 
@@ -331,21 +433,21 @@ async function registerDispatchingInternal(req, res, employeeDetails, shiftDetai
 
     const insertDispatchQuery = `
       INSERT INTO dispatching_emp (employeeID, supervisorID, date, exitTimeComplete, comment)
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, STR_TO_DATE(?, '%h:%i:%s %p'), ?)
     `;
-    
+
     const supervisorID = req.body.supervisorID || null; // Use supervisorID from request, default to null if not provided
     const comment = 1;
-    const values = [employeeID, supervisorID, currentDateOnly, currentTimeSQL, comment];
+    const values = [employeeID, supervisorID, currentDateOnly, currentTimeFormatted, comment];
     const [resultDispatch] = await db.query(insertDispatchQuery, values);
 
     const scheduledExitTimeSQL = `${currentDateOnly} ${shiftEndTimeStr}`;
     const updateAttendanceQuery = `
         UPDATE h_attendance_emp 
-        SET exitTime = ?
+        SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p')
         WHERE hattendanceID = ?
     `;
-    const [resultAttendanceUpdate] = await db.query(updateAttendanceQuery, [scheduledExitTimeSQL, attendanceIDToUpdate]);
+    const [resultAttendanceUpdate] = await db.query(updateAttendanceQuery, [currentTimeFormatted, attendanceIDToUpdate]);
     if (resultAttendanceUpdate.affectedRows === 0) {
       console.error(`Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`);
     }
@@ -383,7 +485,7 @@ exports.registerAttendance = async (req, res) => {
     }
 
     const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
-    const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD HH:mm:ss");
+    const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD hh:mm:ss A");
     const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
     const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
 
@@ -513,6 +615,9 @@ exports.registerAttendance = async (req, res) => {
     let permissionExitTime = null;
     let eventType = '';
 
+    // Obtener el userID del token para registrar quién hizo el cambio
+    const userID = getUserIdFromToken(req);
+
     if (existingRecords.length === 0) {
       if (!canMarkEntry) {
         return res.status(400).json({
@@ -520,8 +625,8 @@ exports.registerAttendance = async (req, res) => {
           employeeName, photoUrl
         });
       }
-      const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, ?, ?, ?, ?)`;
-      const [result] = await db.query(query, [employeeID, currentTimeSQL, currentDateOnly, "1", "1"]);
+      const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, STR_TO_DATE(?, '%h:%i:%s %p'), ?, ?, ?)`;
+      const [result] = await db.query(query, [employeeID, currentTimeFormatted, currentDateOnly, userID || "1", userID || "1"]);
       registrationType = 'entry';
       responseMessage = "Entrada registrada exitosamente";
       attendanceID = result.insertId;
@@ -562,8 +667,8 @@ exports.registerAttendance = async (req, res) => {
         }
       } else {
         if (canMarkExit) {
-          const query = `UPDATE h_attendance_emp SET exitTime = ?, updatedBy = ? WHERE hattendanceID = ?`;
-          const [result] = await db.query(query, [currentTimeSQL, "1", latestRecord.hattendanceID]);
+          const query = `UPDATE h_attendance_emp SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p'), updatedBy = ? WHERE hattendanceID = ?`;
+          const [result] = await db.query(query, [currentTimeFormatted, userID || "1", latestRecord.hattendanceID]);
           if (result.affectedRows === 0) {
             throw new Error("No se pudo actualizar el registro de asistencia para salida.");
           }
@@ -610,577 +715,81 @@ exports.registerAttendance = async (req, res) => {
   }
 };
 
-// Controlador para exportar asistencia de un día específico a Excel
-exports.exportAttendance = async (req, res) => {
-  try {
-    const { filteredAttendance, selectedDate } = req.body;
+// MODIFICADO: Controlador para actualizar tiempo de asistencia con registro de ediciones
+exports.updateTimeAttendance = async (req, res) => {
+  const { hattendanceID, field, newTime } = req.body;
 
-    if (!filteredAttendance || !Array.isArray(filteredAttendance) || filteredAttendance.length === 0) {
-      throw new Error("filteredAttendance is missing or empty.");
-    }
-    if (!selectedDate || typeof selectedDate !== "string") {
-      throw new Error("selectedDate is missing or invalid.");
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Asistencia");
-
-    let maxPermsInDay = 0;
-    filteredAttendance.forEach(record => {
-      let currentPerms = 0;
-      for (let i = 1; i <= 5; i++) {
-        if (record[`permissionExitTime${i}`] || record[`permissionEntryTime${i}`]) {
-          currentPerms = i;
-        }
-      }
-      if (currentPerms > maxPermsInDay) {
-        maxPermsInDay = currentPerms;
-      }
-    });
-
-    const columnHeaders = ["Correlativo", "Código", "Nombre", "Entrada"];
-    const columnWidths = [10, 10, 30, 12];
-
-    for (let i = 1; i <= maxPermsInDay; i++) {
-      columnHeaders.push(`Permiso ${i} S.`);
-      columnHeaders.push(`Permiso ${i} E.`);
-      columnWidths.push(12, 12);
-    }
-
-    columnHeaders.push("Salida");
-    columnWidths.push(12);
-
-    columnHeaders.push("Comentarios");
-    columnWidths.push(30);
-
-    const numberOfColumns = columnHeaders.length;
-
-    const titleBgColor = "E6F0FA";
-    const subtitleBgColor = "F2F2F2";
-    const headerBgColor = "D3D3D3";
-
-    const titleText = `Reporte de Asistencia - Día ${dayjs(selectedDate).format("DD/MM/YYYY")}`;
-    const titleRow = worksheet.addRow([titleText]);
-    titleRow.height = 30;
-
-    worksheet.mergeCells(titleRow.number, 1, titleRow.number, numberOfColumns);
-
-    for (let i = 1; i <= numberOfColumns; i++) {
-      const cell = worksheet.getCell(titleRow.number, i);
-      cell.font = { name: "Calibri", size: 16, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: titleBgColor } };
-    }
-
-    const employeeCount = filteredAttendance.length;
-    const subtitleText = `Empleados registrados: ${employeeCount}`;
-    const subtitleRow = worksheet.addRow([subtitleText]);
-    subtitleRow.height = 25;
-
-    worksheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, numberOfColumns);
-
-    for (let i = 1; i <= numberOfColumns; i++) {
-      const cell = worksheet.getCell(subtitleRow.number, i);
-      cell.font = { name: "Calibri", size: 12, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: subtitleBgColor } };
-    }
-
-    const headerRow = worksheet.addRow(columnHeaders);
-    headerRow.height = 20;
-
-    headerRow.eachCell((cell) => {
-      cell.font = { name: "Calibri", size: 12, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBgColor } };
-      cell.border = {
-        top: { style: "thin", color: { argb: "000000" } },
-        bottom: { style: "thin", color: { argb: "000000" } },
-        left: { style: "thin", color: { argb: "000000" } },
-        right: { style: "thin", color: { argb: "000000" } },
-      };
-    });
-
-    filteredAttendance.forEach((record, index) => {
-      const rowData = [
-        index + 1,
-        record.employeeID || "",
-        record.employeeName || "",
-        record.entryTime || "",
-      ];
-
-      for (let i = 1; i <= maxPermsInDay; i++) {
-        rowData.push(record[`permissionExitTime${i}`] || "");
-        rowData.push(record[`permissionEntryTime${i}`] || "");
-      }
-
-      rowData.push(record.exitTime || "");
-
-      const comments = [];
-      for (let i = 1; i <= 5; i++) {
-        if (record[`permissionExitComment${i}`]) {
-          comments.push(`P${i}S: ${record[`permissionExitComment${i}`]}`);
-        }
-        if (record[`permissionEntryComment${i}`]) {
-          comments.push(`P${i}E: ${record[`permissionEntryComment${i}`]}`);
-        }
-      }
-      if (record.exitComment) {
-        comments.push(`Salida: ${record.exitComment}`);
-      }
-      if (record.dispatchingComment) {
-        comments.push(`Despacho: ${record.dispatchingComment}`);
-      }
-      rowData.push(comments.join(" | ") || "");
-      worksheet.addRow(rowData);
-    });
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 3) {
-        row.eachCell((cell) => {
-          cell.font = { name: "Calibri", size: 11 };
-          cell.alignment = { horizontal: "left", vertical: "middle" };
-          cell.border = {
-            top: { style: "thin", color: { argb: "000000" } },
-            bottom: { style: "thin", color: { argb: "000000" } },
-            left: { style: "thin", color: { argb: "000000" } },
-            right: { style: "thin", color: { argb: "000000" } },
-          };
-        });
-        row.height = 20;
-      }
-    });
-
-    columnWidths.forEach((width, index) => {
-      worksheet.getColumn(index + 1).width = width;
-    });
-
-    const excelBuffer = await workbook.xlsx.writeBuffer();
-    const formattedDate = dayjs(selectedDate).format("YYYYMMDD");
-    const filename = `asistencia_dia_${formattedDate}.xlsx`;
-
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(excelBuffer);
-  } catch (error) {
-    console.error("Error al exportar asistencia:", error.stack || error.message);
-    res.status(500).send({ message: `Error interno del servidor al generar el archivo Excel: ${error.message}` });
+  if (!hattendanceID || !field || !newTime) {
+    return res.status(400).json({ message: "Datos incompletos para la actualización." });
   }
-};
 
-// Controlador para exportar asistencia semanal a Excel
-exports.exportWeeklyAttendance = async (req, res) => {
+  // Validar que el campo a actualizar sea uno de los permitidos.
+  const allowedFields = ["entryTime", "exitTime"];
+  if (!allowedFields.includes(field)) {
+    return res.status(400).json({ message: "El campo especificado no es válido para la actualización." });
+  }
+
+  // Validar formato de tiempo (hh:mm:ss AM/PM)
+  const timeRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])\s?(AM|PM|am|pm)$/i;
+  if (!timeRegex.test(newTime)) {
+    return res.status(400).json({ message: "El formato de hora debe ser hh:mm:ss AM/PM (ej. 02:02:00 PM)." });
+  }
+
   try {
-    const { weeklyAttendance, selectedMonth, selectedWeek } = req.body;
-
-    if (!weeklyAttendance || !Array.isArray(weeklyAttendance)) {
-      throw new Error("weeklyAttendance is missing or invalid.");
-    }
-    if (!selectedMonth || typeof selectedMonth !== "string") {
-      throw new Error("selectedMonth is missing or invalid.");
-    }
-    if (!selectedWeek || typeof selectedWeek !== "string") {
-      throw new Error("selectedWeek is missing or invalid.");
+    // Obtener el userID del token
+    const userID = getUserIdFromToken(req);
+    if (!userID) {
+      return res.status(401).json({ message: "Token de autenticación inválido o no proporcionado." });
     }
 
-    const [activeEmployees] = await db.query(
-      "SELECT employeeID, CONCAT(firstName, ' ', COALESCE(middleName, ''), ' ', lastName) AS employeeName FROM employees_emp WHERE isActive = 1"
+    // Obtener el employeeID, date y el valor actual del campo antes de la actualización
+    const [attendanceRecord] = await db.query(
+      `SELECT employeeID, date, DATE_FORMAT(${field}, '%h:%i:%s %p') as currentTime FROM h_attendance_emp WHERE hattendanceID = ?`,
+      [hattendanceID]
     );
 
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Asistencia Semanal");
-
-    const headerBgColor = "1F3864";
-    const subHeaderBgColor = "D6DCE4";
-
-    const dayHeaderColors = {
-      Lunes: "FFFFFF",
-      Martes: "FFC0CB",
-      Miércoles: "FFFFFF",
-      Jueves: "FFFFFF",
-      Viernes: "FFFFFF",
-      Sábado: "D3D3D3",
-      Domingo: "D3D3D3",
-    };
-
-    const startOfMonth = dayjs().month(parseInt(selectedMonth)).startOf("month");
-    const startOfWeek = startOfMonth.isoWeek(parseInt(selectedWeek)).startOf("isoWeek");
-    const daysOfWeek = [];
-    for (let i = 0; i < 7; i++) {
-      const day = startOfWeek.add(i, "day");
-      daysOfWeek.push({
-        date: day.format("YYYY-MM-DD"),
-        dayName: day.format("dddd").charAt(0).toUpperCase() + day.format("dddd").slice(1),
-        shortDate: day.format("DD/MM"),
-        fullDate: day.format("D [DE] MMMM").toUpperCase(),
-      });
+    if (attendanceRecord.length === 0) {
+      return res.status(404).json({ message: "No se encontró el registro de asistencia para actualizar." });
     }
 
-    const sanitizedWeeklyAttendance = weeklyAttendance.map((record) => {
-      const sanitizeString = (value) => {
-        if (typeof value !== "string") return value || "";
-        return value
-          .replace(/[\x00-\x1F\x7F-\x9F]/g, "")
-          .replace(/\n/g, " ")
-          .replace(/\r/g, "")
-          .replace(/[^\x20-\x7EáéíóúÁÉÍÓÚñÑ]/g, "");
-      };
-      return {
-        employeeID: sanitizeString(record.employeeID),
-        employeeName: sanitizeString(record.employeeName),
-        date: sanitizeString(record.date),
-        entryTime: sanitizeString(record.entryTime),
-        exitTime: sanitizeString(record.exitTime),
-        dispatchingTime: sanitizeString(record.dispatchingTime),
-        dispatchingComment: sanitizeString(record.dispatchingComment),
-        exitComment: sanitizeString(record.exitComment),
-        ...(Array.from({ length: 5 }, (_, i) => ({
-          [`permissionExitTime${i + 1}`]: sanitizeString(record[`permissionExitTime${i + 1}`]),
-          [`permissionEntryTime${i + 1}`]: sanitizeString(record[`permissionEntryTime${i + 1}`]),
-          [`permissionExitComment${i + 1}`]: sanitizeString(record[`permissionExitComment${i + 1}`]),
-          [`permissionEntryComment${i + 1}`]: sanitizeString(record[`permissionEntryComment${i + 1}`]),
-        })).reduce((acc, curr) => ({ ...acc, ...curr }), {})),
-      };
-    });
+    const { employeeID, date, currentTime } = attendanceRecord[0];
+    const oldTime = currentTime || 'Sin valor';
 
-    const includeDispatchColumn = sanitizedWeeklyAttendance.some((record) => record.dispatchingTime);
-    let maxPermsInWeek = 0;
-    sanitizedWeeklyAttendance.forEach(record => {
-      let currentPerms = 0;
-      for (let i = 1; i <= 5; i++) {
-        if (record[`permissionExitTime${i}`] || record[`permissionEntryTime${i}`]) {
-          currentPerms = i;
-        }
-      }
-      if (currentPerms > maxPermsInWeek) {
-        maxPermsInWeek = currentPerms;
-      }
-    });
-
-    const dynamicPermColumnsPerDay = maxPermsInWeek * 2;
-    const columnsPerDay = 1 + dynamicPermColumnsPerDay + (includeDispatchColumn ? 1 : 0) + 1;
-    const totalDataColumns = 3 + (daysOfWeek.length * columnsPerDay) + 1;
-
-    const year = dayjs().year();
-    const monthName = dayjs().month(parseInt(selectedMonth)).format("MMMM").toUpperCase();
-    const title = `Reporte Semanal - Mes ${monthName} Semana ${selectedWeek}`;
-    worksheet.addRow([title]);
-    worksheet.mergeCells(1, 1, 1, totalDataColumns);
-    worksheet.getRow(1).font = { name: "Calibri", size: 16, bold: true, color: { argb: "FFFFFF" } };
-    worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
-    worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerBgColor } };
-    worksheet.getRow(1).height = 30;
-
-    const employeeCount = activeEmployees.length;
-    const subtitle = `Total de empleados activos: ${employeeCount}`;
-    worksheet.addRow([subtitle]);
-    worksheet.mergeCells(2, 1, 2, totalDataColumns);
-    worksheet.getRow(2).font = { name: "Calibri", size: 12, bold: true };
-    worksheet.getRow(2).alignment = { horizontal: "center", vertical: "middle" };
-    worksheet.getRow(2).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F2F2F2" } };
-    worksheet.getRow(2).height = 25;
-
-    const mainHeaderRowData = ["Correlativo", "Código", "Empleado"];
-    for (let i = 0; i < daysOfWeek.length; i++) {
-      mainHeaderRowData.push(...Array(columnsPerDay).fill(""));
-    }
-    mainHeaderRowData.push("Comentarios");
-
-    const mainHeaderRow = worksheet.addRow(mainHeaderRowData);
-    mainHeaderRow.height = 20;
-
-    const subHeaderRowData = ["", "", ""];
-    daysOfWeek.forEach(() => {
-      subHeaderRowData.push("E");
-      for (let i = 1; i <= maxPermsInWeek; i++) {
-        subHeaderRowData.push(`P${i}S`);
-        subHeaderRowData.push(`P${i}E`);
-      }
-      if (includeDispatchColumn) {
-        subHeaderRowData.push("D");
-      }
-      subHeaderRowData.push("S");
-    });
-    subHeaderRowData.push("");
-
-    const subHeaderRow = worksheet.addRow(subHeaderRowData);
-    subHeaderRow.height = 25;
-
-    worksheet.mergeCells(3, 1, 4, 1);
-    worksheet.mergeCells(3, 2, 4, 2);
-    worksheet.mergeCells(3, 3, 4, 3);
-    worksheet.mergeCells(3, totalDataColumns, 4, totalDataColumns);
-
-    worksheet.getCell('A3').font = { name: "Calibri", size: 12, bold: true };
-    worksheet.getCell('A3').alignment = { horizontal: "center", vertical: "middle" };
-    worksheet.getCell('A3').fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF" } };
-    worksheet.getCell('A3').border = {
-      top: { style: "thin", color: { argb: "000000" } }, bottom: { style: "thin", color: { argb: "000000" } },
-      left: { style: "thin", color: { argb: "000000" } }, right: { style: "thin", color: { argb: "000000" } }
-    };
-
-    worksheet.getCell('B3').font = { name: "Calibri", size: 12, bold: true };
-    worksheet.getCell('B3').alignment = { horizontal: "center", vertical: "middle" };
-    worksheet.getCell('B3').fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF" } };
-    worksheet.getCell('B3').border = {
-      top: { style: "thin", color: { argb: "000000" } }, bottom: { style: "thin", color: { argb: "000000" } },
-      left: { style: "thin", color: { argb: "000000" } }, right: { style: "thin", color: { argb: "000000" } }
-    };
-
-    worksheet.getCell('C3').font = { name: "Calibri", size: 12, bold: true };
-    worksheet.getCell('C3').alignment = { horizontal: "center", vertical: "middle" };
-    worksheet.getCell('C3').fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF" } };
-    worksheet.getCell('C3').border = {
-      top: { style: "thin", color: { argb: "000000" } }, bottom: { style: "thin", color: { argb: "000000" } },
-      left: { style: "thin", color: { argb: "000000" } }, right: { style: "thin", color: { argb: "000000" } }
-    };
-
-    const commentsCell = worksheet.getCell(3, totalDataColumns);
-    commentsCell.font = { name: "Calibri", size: 12, bold: true };
-    commentsCell.alignment = { horizontal: "center", vertical: "middle" };
-    commentsCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF" } };
-    commentsCell.border = {
-      top: { style: "thin", color: { argb: "000000" } }, bottom: { style: "thin", color: { argb: "000000" } },
-      left: { style: "thin", color: { argb: "000000" } }, right: { style: "thin", color: { argb: "000000" } }
-    };
-
-    let currentMergeCol = 4;
-    daysOfWeek.forEach((day) => {
-      worksheet.mergeCells(3, currentMergeCol, 3, currentMergeCol + columnsPerDay - 1);
-      const cell = worksheet.getCell(3, currentMergeCol);
-      cell.value = `${day.dayName} ${day.shortDate}`;
-      cell.font = { name: "Calibri", size: 12, bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: dayHeaderColors[day.dayName] || "FFFFFF" } };
-      cell.border = {
-        top: { style: "thin", color: { argb: "000000" } },
-        bottom: { style: "thin", color: { argb: "000000" } },
-        left: { style: "thin", color: { argb: "000000" } },
-        right: { style: "thin", color: { argb: "000000" } },
-      };
-      currentMergeCol += columnsPerDay;
-    });
-
-    subHeaderRow.font = { name: "Calibri", size: 11, bold: true };
-    subHeaderRow.alignment = { horizontal: "center", vertical: "middle" };
-    subHeaderRow.eachCell((cell, colNumber) => {
-      cell.border = {
-        top: { style: "thin", color: { argb: "000000" } },
-        bottom: { style: "thin", color: { argb: "000000" } },
-        left: { style: "thin", color: { argb: "000000" } },
-        right: { style: "thin", color: { argb: "000000" } },
-      };
-      if (colNumber >= 4 && colNumber < totalDataColumns) {
-        const currentDayColIndex = (colNumber - 4) % columnsPerDay;
-        if (currentDayColIndex === 0) {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "C6EFCE" } };
-        } else if (currentDayColIndex === (columnsPerDay - 1)) {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC7CE" } };
-        } else if (includeDispatchColumn && currentDayColIndex === (1 + dynamicPermColumnsPerDay)) {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEB9C" } };
-        } else {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: subHeaderBgColor } };
-        }
-      }
-    });
-
-    const tableData = activeEmployees.map((employee, empIndex) => {
-      const rowData = [empIndex + 1, employee.employeeID, employee.employeeName];
-      const weekComments = [];
-
-      daysOfWeek.forEach((day) => {
-        const record = sanitizedWeeklyAttendance.find((att) => att.employeeID === employee.employeeID && att.date === day.date) || {};
-
-        rowData.push(record.entryTime || "-");
-        for (let i = 1; i <= maxPermsInWeek; i++) {
-          rowData.push(record[`permissionExitTime${i}`] || "-");
-          rowData.push(record[`permissionEntryTime${i}`] || "-");
-        }
-        if (includeDispatchColumn) {
-          rowData.push(record.dispatchingTime || "-");
-        }
-        rowData.push(record.exitTime || "-");
-
-        const dayComments = [];
-        for (let i = 1; i <= 5; i++) {
-          if (record[`permissionExitComment${i}`]) {
-            dayComments.push(`${day.dayName.substring(0, 3)} P${i}S: ${record[`permissionExitComment${i}`]}`);
-          }
-          if (record[`permissionEntryComment${i}`]) {
-            dayComments.push(`${day.dayName.substring(0, 3)} P${i}E: ${record[`permissionEntryComment${i}`]}`);
-          }
-        }
-        if (record.exitComment) {
-          dayComments.push(`${day.dayName.substring(0, 3)} Salida: ${record.exitComment}`);
-        }
-        if (record.dispatchingComment) {
-          dayComments.push(`${day.dayName.substring(0, 3)} Despacho: ${record.dispatchingComment}`);
-        }
-        weekComments.push(...dayComments);
-      });
-
-      rowData.push(weekComments.join(" | ") || "");
-      return rowData;
-    });
-
-    tableData.forEach((row) => worksheet.addRow(row));
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 4) {
-        row.eachCell((cell) => {
-          cell.font = { name: "Calibri", size: 11 };
-          cell.alignment = { horizontal: "center", vertical: "middle" };
-          cell.border = {
-            top: { style: "thin", color: { argb: "000000" } },
-            bottom: { style: "thin", color: { argb: "000000" } },
-            left: { style: "thin", color: { argb: "000000" } },
-            right: { style: "thin", color: { argb: "000000" } },
-          };
-          row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rowNumber % 2 === 1 ? "F5F5F5" : "FFFFFF" } };
-        });
-        row.height = 20;
-      }
-    });
-
-    const columnWidthsDefinition = [
-      { width: 10 },
-      { width: 10 },
-      { width: 30 },
-    ];
-    for (let i = 0; i < daysOfWeek.length; i++) {
-      columnWidthsDefinition.push({ width: 12 });
-      for (let j = 1; j <= maxPermsInWeek; j++) {
-        columnWidthsDefinition.push({ width: 12 });
-        columnWidthsDefinition.push({ width: 12 });
-      }
-      if (includeDispatchColumn) {
-        columnWidthsDefinition.push({ width: 12 });
-      }
-      columnWidthsDefinition.push({ width: 12 });
-    }
-    columnWidthsDefinition.push({ width: 50 });
-
-    worksheet.columns = columnWidthsDefinition;
-
-    const excelBuffer = await workbook.xlsx.writeBuffer();
-    const filename = `asistencia_semanal_semana${selectedWeek}_${year}.xlsx`;
-
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.send(excelBuffer);
-  } catch (error) {
-    console.error("Error al exportar asistencia semanal:", error.stack || error.message);
-    res.status(500).send({ message: `Error interno del servidor al generar el archivo Excel: ${error.message}` });
-  }
-};
-
-// Controlador para exportar asistencia semanal con fechas automáticas
-exports.exportWeeklyAttendanceAuto = async (req, res) => {
-  try {
-    const currentDate = dayjs().tz("America/Tegucigalpa");
-    const startOfWeek = currentDate.subtract(1, 'week').startOf("isoWeek").format("YYYY-MM-DD");
-    const endOfWeek = currentDate.subtract(1, 'week').endOf("isoWeek").format("YYYY-MM-DD");
-
-    const attendanceQuery = `
-      SELECT 
-        h.hattendanceID,
-        h.employeeID,
-        CONCAT(e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS employeeName,
-        DATE_FORMAT(h.entryTime, '%h:%i:%s %p') AS entryTime,
-        DATE_FORMAT(h.exitTime, '%h:%i:%s %p') AS exitTime,
-        DATE_FORMAT(h.date, '%Y-%m-%d') AS date,
-        h.exitComment
-      FROM 
-        h_attendance_emp h
-      JOIN 
-        employees_emp e ON h.employeeID = e.employeeID
-      WHERE 
-        h.date BETWEEN ? AND ?
-        AND e.isActive = 1
-      ORDER BY h.employeeID, h.date DESC
+    // Actualizar el campo de tiempo
+    const updateQuery = `
+      UPDATE h_attendance_emp
+      SET ${field} = STR_TO_DATE(CONCAT(DATE(date), ' ', ?), '%Y-%m-%d %h:%i:%s %p'), updatedBy = ?
+      WHERE hattendanceID = ?
     `;
 
-    const [attendanceRows] = await db.query(attendanceQuery, [startOfWeek, endOfWeek]);
+    const [result] = await db.query(updateQuery, [newTime, userID, hattendanceID]);
 
-    const processedRows = [];
-
-    for (const attendanceRecord of attendanceRows) {
-      const permissionQuery = `
-        SELECT 
-          permissionID,
-          DATE_FORMAT(exitPermission, '%h:%i:%s %p') AS exitPermissionTime,
-          DATE_FORMAT(entryPermission, '%h:%i:%s %p') AS entryPermissionTime,
-          comment
-        FROM 
-          permissionattendance_emp
-        WHERE 
-          employeeID = ? 
-          AND DATE(date) = ?
-          AND (exitPermission IS NOT NULL OR entryPermission IS NOT NULL)
-        ORDER BY 
-          permissionID ASC
-        LIMIT 5
-      `;
-
-      const [permissionRows] = await db.query(permissionQuery, [
-        attendanceRecord.employeeID,
-        attendanceRecord.date
-      ]);
-
-      const dispatchingQuery = `
-        SELECT 
-          DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
-          CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
-        FROM 
-        dispatching_emp
-        WHERE 
-          employeeID = ? 
-          AND DATE(date) = ?
-        LIMIT 1
-      `;
-
-      const [dispatchingRows] = await db.query(dispatchingQuery, [
-        attendanceRecord.employeeID,
-        attendanceRecord.date
-      ]);
-
-      const processedRecord = { ...attendanceRecord };
-
-      permissionRows.forEach((permission, index) => {
-        const permissionNumber = index + 1;
-        if (permission.exitPermissionTime) {
-          processedRecord[`permissionExitTime${permissionNumber}`] = permission.exitPermissionTime;
-          processedRecord[`permissionExitComment${permissionNumber}`] = permission.comment || '';
-        }
-        if (permission.entryPermissionTime) {
-          processedRecord[`permissionEntryTime${permissionNumber}`] = permission.entryPermissionTime;
-          processedRecord[`permissionEntryComment${permissionNumber}`] = permission.comment || '';
-        }
-      });
-
-      if (dispatchingRows.length > 0) {
-        processedRecord.dispatchingTime = dispatchingRows[0].dispatchingTime;
-        processedRecord.dispatchingComment = dispatchingRows[0].dispatchingComment;
-      }
-
-      processedRows.push(processedRecord);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "No se pudo actualizar el registro de asistencia." });
     }
 
-    const weekNumber = currentDate.subtract(1, 'week').isoWeek();
-    const monthNumber = currentDate.subtract(1, 'week').month();
+    // Registrar la edición en la tabla attendance_edits_users
+    await logAttendanceEdit(hattendanceID, field, oldTime, newTime, userID);
 
-    const reqBody = {
-      body: {
-        weeklyAttendance: processedRows,
-        selectedMonth: monthNumber.toString(),
-        selectedWeek: weekNumber.toString()
-      }
-    };
+    // Emitir el registro actualizado con el historial de ediciones
+    const fullRecord = await getSingleAttendanceRecord(employeeID, date);
+    if (fullRecord) {
+      io.emit('newAttendanceRecord', {
+        type: 'update_record',
+        record: fullRecord,
+      });
+    }
 
-    await exports.exportWeeklyAttendance(reqBody, res);
+    return res.status(200).json({ 
+      success: true, 
+      message: "Hora actualizada correctamente.",
+      editedBy: await getUsernameById(userID),
+      oldTime,
+      newTime
+    });
 
   } catch (error) {
-    console.error("Error al exportar asistencia semanal automática:", error.stack || error.message);
-    res.status(500).send({ message: `Error interno del servidor al generar el archivo Excel: ${error.message}` });
+    console.error(`Error al actualizar el campo de tiempo: ${error}`);
+    return res.status(500).json({ message: "Error interno del servidor al actualizar la hora: " + error.message });
   }
 };
