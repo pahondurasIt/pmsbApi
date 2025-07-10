@@ -40,7 +40,7 @@ exports.getEmployees = async (req, res) => {
       SELECT
           e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive,
-          e.evaluationStep
+          e.evaluationStep, e.hireDate
         FROM employees_emp e
               INNER JOIN pmsb.division_emp di on di.divisionID = e.divisionID
               INNER JOIN pmsb.area_emp a on a.areaID = e.areaID
@@ -176,6 +176,34 @@ exports.getEmployeeByID = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener dato del empleado" });
+  }
+};
+
+// Actualizar evaluación del empleado
+exports.updateEvaluation = async (req, res) => {
+  try {
+    const { employeeID } = req.params;
+    const { evaluationStep } = req.body;
+
+    if (!isValidNumber(employeeID)) {
+      return res.status(400).json({ message: "ID de empleado no válido" });
+    }    
+    
+    const [result] = await db.query(
+      `UPDATE employees_emp SET evaluationStep = ?, updatedDate= ?, updatedBy = ? WHERE employeeID = ?`,
+      [evaluationStep, ...camposAuditoriaUPDATE, employeeID]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ message: "Empleado no encontrado" });
+    }
+
+    res.status(200).json({ message: "Evaluación actualizada correctamente" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al actualizar evaluación del empleado" });
   }
 };
 
@@ -638,7 +666,6 @@ exports.addChild = async (req, res) => {
     res.status(500).json({ message: "Error al crear el hijo" });
   }
 };
-
 exports.updateChild = async (req, res) => {
   const {
     firstName,
@@ -684,7 +711,6 @@ exports.updateChild = async (req, res) => {
     res.status(500).json({ message: "Error al actualizar el hijo" });
   }
 };
-
 exports.deleteChild = async (req, res) => {
   const { childrenID } = req.params;
   try {
@@ -732,7 +758,6 @@ exports.addFamilyInfo = async (req, res) => {
     res.status(500).json({ message: "Error al crear la información familiar" });
   }
 };
-
 exports.updateFamilyInfo = async (req, res) => {
   const {
     relativesTypeID,
@@ -779,7 +804,6 @@ exports.updateFamilyInfo = async (req, res) => {
       .json({ message: "Error al actualizar la información familiar" });
   }
 };
-
 exports.deleteFamilyInfo = async (req, res) => {
   const { familyInfoID } = req.params;
   if (!isValidNumber(familyInfoID)) {
@@ -845,7 +869,6 @@ exports.addEContact = async (req, res) => {
       .json({ message: "Error al crear el contacto de emergencia" });
   }
 };
-
 exports.updateEContact = async (req, res) => {
   const {
     firstName,

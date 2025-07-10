@@ -2,6 +2,7 @@ const db = require("../config/db");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
+const { camposAuditoriaUPDATE } = require("../helpers/columnasAuditoria");
 require('dayjs/locale/es')
 
 // Extender dayjs con plugins de UTC y Timezone
@@ -60,7 +61,7 @@ exports.getAllPermissions = async (req, res) => {
         ' ', e.lastName,  ' ', e.secondLastName) as fullName,
         e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
-        pa.exitPermission, pa.entryPermission, pa.IsApproved
+        pa.exitPermission, pa.entryPermission, pa.IsApproved, pa.isPaid
     FROM
     pmsb.permissionattendance_emp pa
             INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
@@ -69,6 +70,29 @@ exports.getAllPermissions = async (req, res) => {
     where pa.date = DATE(NOW())
     ORDER BY pa.permissionID desc;
     `);
+    res.json(results);
+  } catch (err) {
+    console.error("Error fetching all permissions:", err);
+    res.status(500).json({
+      message: "Error al cargar todos los permisos",
+      error: err.message,
+    });
+  }
+};
+
+// Función para obtener todos los permisos registrados
+exports.markPermissionAsPaid = async (req, res) => {
+  try {
+    const { permissionID } = req.params;
+    const { isPaid } = req.body;
+    const [results] = await db.query(`
+      UPDATE pmsb.permissionattendance_emp
+      SET isPaid = ?, updatedDate = ?, updatedBy = ?
+      WHERE permissionID = ?
+    `, [isPaid, ...camposAuditoriaUPDATE, permissionID]);
+    if (results.affectedRows === 0) {
+      return res.status(500).json({ message: "Permiso no encontrado o ya está marcado como pagado." });
+    }
     res.json(results);
   } catch (err) {
     console.error("Error fetching all permissions:", err);

@@ -52,7 +52,7 @@ exports.postAddTime = async (req, res) => {
         )
 
         if (!employee) {
-            return res.status(404).json({ message: "Empleado no encontrado" });
+            return res.status(500).json({ message: "Empleado no encontrado" });
         }
 
         const now = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
