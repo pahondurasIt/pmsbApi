@@ -4,11 +4,12 @@ const employeeController = require('../controllers/employeeController');
 
 router.get('/', employeeController.getEmployees);
 router.post('/', employeeController.createEmployee);
+router.put('/:employeeID', employeeController.updateEmployee);
 router.put('/updateEvaluationStep/:employeeID', employeeController.updateEvaluation);
 router.get('/supervisoresSewing', employeeController.getSupervisorSewing);
 router.get('/employeesSewing', employeeController.getEmployeesSewing);
-
-router.delete('/:employeeID', employeeController.deleteEmployee);
+// router.delete('/:employeeID', employeeController.deleteEmployee);
+router.post('/disabledEmployee', employeeController.disabledEmployee);
 router.get('/employeeByID/:employeeID', employeeController.getEmployeeByID);
 router.get('/searchEmployee/:searchTerm', employeeController.getEmployeeSearch);
 router.post('/uploadPhoto/:employeeID', employeeController.uploadPhoto);

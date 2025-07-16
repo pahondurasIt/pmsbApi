@@ -13,9 +13,9 @@ exports.getLines = async (req, res) => {
                 l.supervisorID, e.codeEmployee, concat(e.firstName, " ", e.middleName, " ", e.lastName, " ", e.secondLastName) AS supervisorName,
                 COUNT(el.employeeID) AS totalEmployees, l.companyID
             FROM
-                pmsb.lines_emp l
-            JOIN pmsb.employees_emp e ON l.supervisorID = e.employeeID
-            LEFT JOIN pmsb.employeelines_emp el ON l.linesID = el.linesID
+                lines_emp l
+            JOIN employees_emp e ON l.supervisorID = e.employeeID
+            LEFT JOIN employeelines_emp el ON l.linesID = el.linesID
             GROUP BY
                 l.linesID, l.linesNumber, e.employeeID, e.codeEmployee, e.firstName ,e. middleName, e.lastName
             ORDER BY
@@ -36,7 +36,7 @@ exports.createLine = async (req, res) => {
     const { linesNumber, supervisorID, companyID } = req.body;
     const [result] = await db.query(
       `
-            INSERT INTO pmsb.lines_emp (linesNumber, supervisorID, companyID, createDate,
+            INSERT INTO lines_emp (linesNumber, supervisorID, companyID, createDate,
             createBy, updateDate, updateBy)
             VALUES (?, ?, ?, ?);
       `,
@@ -65,7 +65,7 @@ exports.updateLine = async (req, res) => {
     const { linesNumber, supervisorID } = req.body;
     await db.query(
       `
-            UPDATE pmsb.lines_emp
+            UPDATE lines_emp
             SET linesNumber = ?, supervisorID = ?, updateDate = ?, updateBy = ?
             WHERE linesID = ?;
       `,
@@ -93,8 +93,8 @@ exports.employeesByLine = async (req, res) => {
               employeeLinesID, e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) employeeName,
               e.employeeID, e.codeEmployee, el.linesID, e.employeeID, e.photoUrl
             FROM
-                pmsb.employeelines_emp  el
-            inner join pmsb.employees_emp e on el.employeeID = e.employeeID
+                employeelines_emp  el
+            inner join employees_emp e on el.employeeID = e.employeeID
             WHERE
                 el.linesID = ?
             order by el.employeeID asc;
@@ -118,9 +118,9 @@ exports.employeesWithoutLine = async (req, res) => {
           e.employeeID, e.codeEmployee,
           CONCAT(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) AS employeeName
         FROM 
-            pmsb.employees_emp e
+            employees_emp e
         LEFT JOIN 
-            pmsb.employeelines_emp el ON e.employeeID = el.employeeID
+            employeelines_emp el ON e.employeeID = el.employeeID
         WHERE 
           e.companyID = 1 and e.isActive = 1 and e.jobID = 73 and el.employeeID IS NULL;
       `
@@ -141,19 +141,19 @@ exports.addEmployeeToLine = async (req, res) => {
       return res.status(400).json({ message: "Faltan datos requeridos" });
     }
     const [employeeAsignado] = await db.query(
-      `select el.employeeLinesID, el.employeeID, el.linesID, l.linesNumber from pmsb.employeelines_emp el
-        inner join pmsb.lines_emp l on l.linesID = el.linesID where employeeID = ?;`,
+      `select el.employeeLinesID, el.employeeID, el.linesID, l.linesNumber from employeelines_emp el
+        inner join lines_emp l on l.linesID = el.linesID where employeeID = ?;`,
       [employeeID]
     );
     if (employeeAsignado.length > 0) {
       await db.query(
-        `Delete from pmsb.employeelines_emp where employeeID = ?;`,
+        `Delete from employeelines_emp where employeeID = ?;`,
         [employeeID]
       );
     }
     const [result] = await db.query(
       `
-            INSERT INTO pmsb.employeelines_emp (employeeID, linesID, createDate, createBy, updateDate, updateBy)
+            INSERT INTO employeelines_emp (employeeID, linesID, createDate, createBy, updateDate, updateBy)
             VALUES (?, ?, ?);
       `,
       [employeeID, linesID, camposAuditoriaADD]
@@ -181,7 +181,7 @@ exports.removeEmployeeFromLine = async (req, res) => {
     const { employeeLinesID } = req.params;
     const [result] = await db.query(
       `
-            DELETE FROM pmsb.employeelines_emp
+            DELETE FROM employeelines_emp
             WHERE employeeLinesID = ?;
       `,
       [employeeLinesID]

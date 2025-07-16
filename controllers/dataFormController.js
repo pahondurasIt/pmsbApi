@@ -19,11 +19,11 @@ exports.getDataForm = async (req, res) => {
     const [areas] = await db.query('SELECT areaID, areaName, divisionID FROM area_emp where companyID = 1');
     const [departments] = await db.query('SELECT departmentID, departmentName, areaID FROM department_emp where companyID = 1');
     const [jobs] = await db.query('SELECT jobID, jobName, departmentID FROM jobs_emp where companyID = 1');
-    const [employeeType] = await db.query('SELECT employeeTypeID, employeeTypeDesc FROM pmsb.employeetype_emp where companyID = 1');
+    const [employeeType] = await db.query('SELECT employeeTypeID, employeeTypeDesc FROM employeetype_emp where companyID = 1');
     const [contractType] = await db.query('SELECT contractTypeID, statusDesc FROM contracttype_emp where companyID = 1');
     const [payrollType] = await db.query('SELECT payrollTypeID, payrollName FROM payrolltype_emp where companyID = 1');
     const [shifts] = await db.query('SELECT shiftID, shiftName FROM shifts_emp where companyID = 1');
-    const [correlative] = await db.query('SELECT lastUsed FROM pmsb.correlative where companyID = 1 and correlativeID = 1');
+    const [correlative] = await db.query('SELECT lastUsed FROM correlative where companyID = 1 and correlativeID = 1');
 
     res.json({
       bloodTypes,
@@ -51,6 +51,17 @@ exports.getDataForm = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error al obtener datos para el formulario de empleados' });
+  }
+};
+
+// Obtener los tipos de despido
+exports.getDismissalType = async (req, res) => {
+  try {
+    const [dismissalTypes] = await db.query('SELECT dismissalTypeID, dismissalDesc FROM dismissaltype_emp WHERE companyID = 1');
+    res.json(dismissalTypes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener los tipos de despido' });
   }
 };
 
