@@ -243,7 +243,7 @@ exports.getAttendance = async (req, res) => {
       const dispatchingQuery = `
         SELECT 
           DATE_FORMAT(exitTimeComplete, '%h:%i:%s %p') AS dispatchingTime,
-          CASE WHEN comment = 1 THEN 'Meta' ELSE '' END AS dispatchingComment
+          CASE WHEN comment = 1 THEN 'Cumplimiento de Meta' ELSE '' END AS dispatchingComment
         FROM 
           dispatching_emp
         WHERE 
