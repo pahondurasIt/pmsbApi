@@ -24,11 +24,11 @@ const getUserIdFromToken = (req) => {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return null;
     }
-    
+
     const token = authHeader.substring(7); // Remover 'Bearer '
     const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key';
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     return decoded.id; // Retorna el userID del token
   } catch (error) {
     console.error('Error al decodificar token JWT:', error);
@@ -36,80 +36,7 @@ const getUserIdFromToken = (req) => {
   }
 };
 
-// NUEVO: Función auxiliar para obtener el nombre de usuario por ID
-const getUsernameById = async (userID) => {
-  try {
-    if (!userID) return 'Usuario desconocido';
-    
-    const [userRows] = await db.query(
-      'SELECT username FROM users_us WHERE userID = ?',
-      [userID]
-    );
-    
-    if (userRows.length > 0) {
-      return userRows[0].username;
-    }
-    
-    return 'Usuario desconocido';
-  } catch (error) {
-    console.error('Error al obtener nombre de usuario:', error);
-    return 'Usuario desconocido';
-  }
-};
 
-// NUEVO: Función auxiliar para registrar ediciones en la tabla attendance_edits_users
-const logAttendanceEdit = async (hattendanceID, field, oldTime, newTime, editedByID) => {
-  try {
-    if (!editedByID) {
-      console.warn('No se pudo registrar la edición: editedByID es null');
-      return;
-    }
-
-    const editDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD HH:mm:ss");
-    
-    const insertQuery = `
-      INSERT INTO attendance_edits_users (hattendanceID, field, oldTime, newTime, editedByID, editDate)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-    
-    await db.query(insertQuery, [hattendanceID, field, oldTime, newTime, editedByID, editDate]);
-    console.log(`Edición registrada: ${field} cambiado de "${oldTime}" a "${newTime}" por usuario ${editedByID}`);
-  } catch (error) {
-    console.error('Error al registrar edición:', error);
-  }
-};
-
-// NUEVO: Función auxiliar para obtener el historial de ediciones con nombres de usuario
-const getEditHistoryWithUsernames = async (hattendanceID) => {
-  try {
-    const query = `
-      SELECT 
-        aeu.field,
-        aeu.oldTime,
-        aeu.newTime,
-        aeu.editDate,
-        aeu.editedByID,
-        u.username as editedByUser
-      FROM attendance_edits_users aeu
-      LEFT JOIN users_us u ON aeu.editedByID = u.userID
-      WHERE aeu.hattendanceID = ?
-      ORDER BY aeu.editDate DESC
-    `;
-    
-    const [editRows] = await db.query(query, [hattendanceID]);
-    
-    return editRows.map(edit => ({
-      field: edit.field,
-      oldTime: edit.oldTime,
-      newTime: edit.newTime,
-      editDate: edit.editDate,
-      editedByUser: edit.editedByUser || 'Usuario desconocido'
-    }));
-  } catch (error) {
-    console.error('Error al obtener historial de ediciones:', error);
-    return [];
-  }
-};
 
 // --- NUEVO: Función auxiliar para obtener un registro de asistencia completo ---
 async function getSingleAttendanceRecord(employeeID, date) {
@@ -133,9 +60,7 @@ async function getSingleAttendanceRecord(employeeID, date) {
 
   const attendanceRecord = attendanceRows[0];
 
-  // Obtener historial de ediciones con nombres de usuario
-  const editHistory = await getEditHistoryWithUsernames(attendanceRecord.hattendanceID);
-  attendanceRecord.editHistory = editHistory;
+
 
   const permissionQuery = `
     SELECT 
@@ -265,12 +190,15 @@ exports.getAttendance = async (req, res) => {
     const values = [];
 
     if (startDate && endDate) {
-      conditions.push("h.date BETWEEN ? AND ?");
+      conditions.push("h.date = ?");
       values.push(startDate, endDate);
     }
     if (specificDate) {
       conditions.push("h.date = ?");
       values.push(specificDate);
+    } else if (startDate && endDate) {
+      conditions.push("h.date BETWEEN ? AND ?");
+      values.push(startDate, endDate);
     }
     if (conditions.length > 0) {
       attendanceQuery += " WHERE " + conditions.join(" AND ");
@@ -282,9 +210,8 @@ exports.getAttendance = async (req, res) => {
     const processedRows = [];
 
     for (const attendanceRecord of attendanceRows) {
-      // Obtener historial de ediciones con nombres de usuario
-      const editHistory = await getEditHistoryWithUsernames(attendanceRecord.hattendanceID);
-      
+      const processedRecord = { ...attendanceRecord };
+
       const permissionQuery = `
         SELECT 
           permissionID,
@@ -323,8 +250,6 @@ exports.getAttendance = async (req, res) => {
         attendanceRecord.employeeID,
         attendanceRecord.date
       ]);
-
-      const processedRecord = { ...attendanceRecord, editHistory };
 
       permissionRows.forEach((permission, index) => {
         const permissionNumber = index + 1;
@@ -768,8 +693,6 @@ exports.updateTimeAttendance = async (req, res) => {
       return res.status(404).json({ message: "No se pudo actualizar el registro de asistencia." });
     }
 
-    // Registrar la edición en la tabla attendance_edits_users
-    await logAttendanceEdit(hattendanceID, field, oldTime, newTime, userID);
 
     // Emitir el registro actualizado con el historial de ediciones
     const fullRecord = await getSingleAttendanceRecord(employeeID, date);
@@ -780,10 +703,9 @@ exports.updateTimeAttendance = async (req, res) => {
       });
     }
 
-    return res.status(200).json({ 
-      success: true, 
+    return res.status(200).json({
+      success: true,
       message: "Hora actualizada correctamente.",
-      editedBy: await getUsernameById(userID),
       oldTime,
       newTime
     });
