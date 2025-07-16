@@ -4,7 +4,7 @@ const connection = mysql.createPool({
   host: '192.168.30.52',
   user: 'pmsbeta',
   password: '@H0ndur@s#SQL@',
-  database: 'pmsb',
+  database: 'pmsdev',
   waitForConnections: true,
   connectionLimit: 10,
 });

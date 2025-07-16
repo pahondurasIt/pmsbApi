@@ -29,8 +29,8 @@ exports.getPermissionData = async (req, res) => {
       `
         SELECT 
           s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
-        FROM pmsb.detailsshift_emp ds
-        INNER JOIN pmsb.shifts_emp s ON ds.shiftID = s.shiftID
+        FROM detailsshift_emp ds
+        INNER JOIN shifts_emp s ON ds.shiftID = s.shiftID
         WHERE s.companyID = 1
           AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
           AND (
@@ -63,7 +63,7 @@ exports.getAllPermissions = async (req, res) => {
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
         pa.exitPermission, pa.entryPermission, pa.IsApproved, pa.isPaid
     FROM
-    pmsb.permissionattendance_emp pa
+    permissionattendance_emp pa
             INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
             INNER JOIN employees_emp e on e.employeeID = pa.employeeID
             INNER JOIN jobs_emp j on e.jobID = j.jobID
@@ -86,7 +86,7 @@ exports.markPermissionAsPaid = async (req, res) => {
     const { permissionID } = req.params;
     const { isPaid } = req.body;
     const [results] = await db.query(`
-      UPDATE pmsb.permissionattendance_emp
+      UPDATE permissionattendance_emp
       SET isPaid = ?, updatedDate = ?, updatedBy = ?
       WHERE permissionID = ?
     `, [isPaid, ...camposAuditoriaUPDATE, permissionID]);
@@ -120,7 +120,7 @@ exports.authorizePermission = async (req, res) => {
 
     const [permissionResults] = await db.query(
       `
-        SELECT * FROM pmsb.permissionattendance_emp pa
+        SELECT * FROM permissionattendance_emp pa
           where pa.date = DATE(NOW()) and IsApproved
           and pa.employeeID = ? and isnull(pa.exitPermission)
         `,
@@ -166,8 +166,8 @@ exports.authorizePermission = async (req, res) => {
     const values = [
       employeeID,
       permissionType,
-      currentDateOnly,
-      dayjs(exitTimePermission).tz("America/Tegucigalpa").format('HH:mm').toString(),     // NUEVO: Hora de salida
+      currentDateOnly(),
+      dayjs(exitTimePermission).tz("America/Tegucigalpa").format('HH:mm'),     // NUEVO: Hora de salida
       dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),    // NUEVO: Hora de entrada de regreso
       commentValue,
       isPaidValue,
@@ -190,7 +190,7 @@ exports.authorizePermission = async (req, res) => {
             pa.date, pa.exitTimePermission, pa.entryTimePermission,
             pa.exitPermission, pa.entryPermission, pa.IsApproved
           FROM
-          pmsb.permissionattendance_emp pa
+          permissionattendance_emp pa
             INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
             INNER JOIN employees_emp e on e.employeeID = pa.employeeID
             INNER JOIN jobs_emp j on e.jobID = j.jobID

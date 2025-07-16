@@ -23,11 +23,11 @@ exports.printTicketPermission = async (req, res) => {
                 concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) completeName, e.codeEmployee,
                 ROUND(TIMESTAMPDIFF(Minute, p.exitTimePermission, p.entryTimePermission) /60, 2) AS hoursDifference
             from 
-                pmsb.permissionattendance_emp p
-            inner join pmsb.permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
-            inner join pmsb.users_us u on p.createdBy = u.userID
-            inner join pmsb.employees_emp e on p.employeeID = e.employeeID
-            inner join pmsb.jobs_emp j on j.jobID = e.jobID
+                permissionattendance_emp p
+            inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
+            inner join users_us u on p.createdBy = u.userID
+            inner join employees_emp e on p.employeeID = e.employeeID
+            inner join jobs_emp j on j.jobID = e.jobID
             where p.employeeID = ${employeeID} and p.isApproved = 1
             and p.entryPermission is null and p.date = DATE(NOW())
             order by p.exitTimePermission desc
