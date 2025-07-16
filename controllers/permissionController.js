@@ -3,7 +3,7 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
 const { camposAuditoriaUPDATE } = require("../helpers/columnasAuditoria");
-require('dayjs/locale/es')
+require("dayjs/locale/es");
 
 // Extender dayjs con plugins de UTC y Timezone
 dayjs.extend(utc);
@@ -16,10 +16,19 @@ exports.getPermissionData = async (req, res) => {
     );
     const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
     const [employeeResults] = await db.query(
-      `SELECT DISTINCT e.employeeID, CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) as fullName 
-       FROM employees_emp e
-       JOIN h_attendance_emp a ON e.employeeID = a.employeeID 
-       WHERE DATE(a.date) = ?`,
+      `SELECT DISTINCT
+        e.employeeID,
+        CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS fullName
+      FROM
+          employees_emp e
+          INNER JOIN h_attendance_emp a ON e.employeeID = a.employeeID
+      WHERE
+          DATE(a.date) = ?
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dispatching_emp d
+        WHERE d.employeeID = e.employeeID
+    );`,
       [currentDate]
     );
 
@@ -42,7 +51,11 @@ exports.getPermissionData = async (req, res) => {
       `
     );
 
-    res.json({ permissions: permissionResults, employees: employeeResults, shiftDetail });
+    res.json({
+      permissions: permissionResults,
+      employees: employeeResults,
+      shiftDetail,
+    });
   } catch (err) {
     console.error("Error fetching permission data:", err);
     res.status(500).json({
@@ -85,13 +98,20 @@ exports.markPermissionAsPaid = async (req, res) => {
   try {
     const { permissionID } = req.params;
     const { isPaid } = req.body;
-    const [results] = await db.query(`
+    const [results] = await db.query(
+      `
       UPDATE permissionattendance_emp
       SET isPaid = ?, updatedDate = ?, updatedBy = ?
       WHERE permissionID = ?
-    `, [isPaid, ...camposAuditoriaUPDATE, permissionID]);
+    `,
+      [isPaid, ...camposAuditoriaUPDATE, permissionID]
+    );
     if (results.affectedRows === 0) {
-      return res.status(500).json({ message: "Permiso no encontrado o ya está marcado como pagado." });
+      return res
+        .status(500)
+        .json({
+          message: "Permiso no encontrado o ya está marcado como pagado.",
+        });
     }
     res.json(results);
   } catch (err) {
@@ -108,13 +128,24 @@ exports.markPermissionAsPaid = async (req, res) => {
 exports.authorizePermission = async (req, res) => {
   try {
     // Extraemos también los nuevos campos de hora del cuerpo de la solicitud
-    const { employeeID, permissionType, exitTimePermission, entryTimePermission } = req.body;
+    const {
+      employeeID,
+      permissionType,
+      exitTimePermission,
+      entryTimePermission,
+    } = req.body;
 
     // Validación actualizada para incluir los nuevos campos obligatorios
-    if (!employeeID || !permissionType || !exitTimePermission || !entryTimePermission) {
+    if (
+      !employeeID ||
+      !permissionType ||
+      !exitTimePermission ||
+      !entryTimePermission
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Datos incompletos. Se requiere ID de empleado, tipo de permiso, hora de salida y hora de entrada.",
+        message:
+          "Datos incompletos. Se requiere ID de empleado, tipo de permiso, hora de salida y hora de entrada.",
       });
     }
 
@@ -130,12 +161,10 @@ exports.authorizePermission = async (req, res) => {
     if (permissionResults.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Ya existe un permiso pendiente de autorización para este empleado.",
+        message:
+          "Ya existe un permiso pendiente de autorización para este empleado.",
       });
     }
-
-    const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
-    const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
 
     // Query actualizado para incluir los nuevos campos de hora
     const query = `
@@ -166,9 +195,9 @@ exports.authorizePermission = async (req, res) => {
     const values = [
       employeeID,
       permissionType,
-      currentDateOnly(),
-      dayjs(exitTimePermission).tz("America/Tegucigalpa").format('HH:mm'),     // NUEVO: Hora de salida
-      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),    // NUEVO: Hora de entrada de regreso
+      dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD"), // Fecha actual en formato YYYY-MM-DD
+      dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm"), // NUEVO: Hora de salida
+      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"), // NUEVO: Hora de entrada de regreso
       commentValue,
       isPaidValue,
       isApprovedValue,
@@ -207,15 +236,17 @@ exports.authorizePermission = async (req, res) => {
         savedData: permissionResults[0] || null,
       });
     } else {
-      throw new Error("No se pudo guardar el registro del permiso en la base de datos.");
+      throw new Error(
+        "No se pudo guardar el registro del permiso en la base de datos."
+      );
     }
   } catch (error) {
     console.error("Error en authorizePermission:", error);
     res.status(500).json({
       success: false,
-      message: "Ocurrió un error en el servidor al intentar autorizar el permiso.",
+      message:
+        "Ocurrió un error en el servidor al intentar autorizar el permiso.",
       error: error.message,
     });
   }
 };
-

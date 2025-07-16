@@ -7,7 +7,7 @@ exports.getRegistrosByEmp = async (req, res) => {
                                                 salida2 SalidaP1, entrada2 Entrada2, salida3 SalidaP2, entrada3 Entrada3,
                                                 salida4 SalidaP3, entrada4 Entrada4,  
                                                 salida5 Salida4, entrada5 Entrada5, salida Salida, 
-                                                if (despacho, 'Cumplimiento de meta', '-') Despacho   
+                                                if (despacho, 'Meta', '-') Despacho   
                                                 from registros r
                                                 inner join empleados em on  em.id = r.empleado_id
                                                 where r.empleado_id = ${req.params.id}
