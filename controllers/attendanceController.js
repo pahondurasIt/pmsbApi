@@ -1,3 +1,4 @@
+// Explaining: Importing required modules and extending dayjs with plugins
 const db = require("../config/db"); // Importa la conexión a la base de datos
 const dayjs = require("dayjs"); // Librería para manejar fechas y horas
 const ExcelJS = require("exceljs"); // Librería para manejar Excel
@@ -12,12 +13,12 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isoWeek);
 
-// Función auxiliar para formatear la hora con AM/PM
+// Explaining: Helper function to format time with AM/PM
 const formatTimeWithPeriod = (dayjsDate) => {
   return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
 };
 
-// NUEVO: Función auxiliar para obtener el userID del token JWT
+// Explaining: Helper function to get userID from JWT token
 const getUserIdFromToken = (req) => {
   try {
     const authHeader = req.headers.authorization;
@@ -36,7 +37,7 @@ const getUserIdFromToken = (req) => {
   }
 };
 
-// --- NUEVO: Función auxiliar para obtener un registro de asistencia completo ---
+// Explaining: Helper function to retrieve a complete attendance record
 async function getSingleAttendanceRecord(employeeID, date) {
   const attendanceQuery = `
     SELECT 
@@ -105,7 +106,7 @@ async function getSingleAttendanceRecord(employeeID, date) {
   return attendanceRecord;
 }
 
-// --- Funciones Auxiliares (Permisos, etc.) ---
+// Explaining: Helper functions for permission checks and updates
 async function checkActivePermission(employeeID) {
   try {
     const currentDateOnly = dayjs()
@@ -173,7 +174,7 @@ async function updatePermissionRecordWithEntry(permissionID, currentTime) {
   }
 }
 
-// --- Controladores (getAttendance, updatePermissionComment) ---
+// Explaining: Controller to fetch attendance records
 exports.getAttendance = async (req, res) => {
   try {
     const { startDate, endDate, specificDate } = req.query;
@@ -294,6 +295,7 @@ exports.getAttendance = async (req, res) => {
   }
 };
 
+// Explaining: Controller to update permission comments
 exports.updatePermissionComment = async (req, res) => {
   try {
     const { permissionID, comment } = req.body;
@@ -330,7 +332,7 @@ exports.updatePermissionComment = async (req, res) => {
   }
 };
 
-// Controlador interno para registrar despacho
+// Explaining: Internal controller for registering dispatch
 async function registerDispatchingInternal(
   req,
   res,
@@ -447,7 +449,7 @@ async function registerDispatchingInternal(
   }
 }
 
-// Controlador para registrar asistencia
+// Explaining: Modified registerAttendance controller with updated time restrictions
 exports.registerAttendance = async (req, res) => {
   let employeeRecords = [];
   let shiftRecords = [];
@@ -464,6 +466,7 @@ exports.registerAttendance = async (req, res) => {
     const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
     const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
 
+    // Explaining: Fetch employee details
     [employeeRecords] = await db.query(
       "SELECT firstName, middleName, lastName, photoUrl, shiftID, isActive FROM employees_emp WHERE employeeID = ?",
       [employeeID]
@@ -497,6 +500,7 @@ exports.registerAttendance = async (req, res) => {
     const photoUrl = employee.photoUrl || "";
     const shiftID = employee.shiftID;
 
+    // Explaining: Fetch shift details
     [shiftRecords] = await db.query(
       "SELECT startTime, endTime FROM detailsshift_emp WHERE shiftID = ?",
       [shiftID]
@@ -514,6 +518,7 @@ exports.registerAttendance = async (req, res) => {
     const shiftStartTimeStr = shift.startTime;
     const shiftEndTimeStr = shift.endTime;
 
+    // Explaining: Check for finalized records (exit or dispatch)
     const [finalizedCheck] = await db.query(
       `SELECT h.exitTime, d.dispatchingID 
          FROM h_attendance_emp h 
@@ -535,6 +540,7 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
+    // Explaining: Handle pending permission return
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
     if (pendingReturnStatus.hasPendingReturn) {
       if (operationMode === "DESPACHO") {
@@ -556,6 +562,7 @@ exports.registerAttendance = async (req, res) => {
         if (shiftEndTime.isBefore(shiftStartTime))
           shiftEndTime = shiftEndTime.add(1, "day");
 
+        // Explaining: Retaining permission entry time window check as it was not requested to be removed
         if (
           !currentDateTimeCST.isAfter(shiftStartTime.subtract(1, "hour")) ||
           !currentDateTimeCST.isBefore(shiftEndTime.add(1, "hour"))
@@ -611,6 +618,7 @@ exports.registerAttendance = async (req, res) => {
       }
     }
 
+    // Explaining: Handle dispatch operation
     if (operationMode === "DESPACHO") {
       const employeeDetails = { employeeName, photoUrl };
       const shiftDetails = { shiftEndTimeStr };
@@ -622,6 +630,7 @@ exports.registerAttendance = async (req, res) => {
       );
     }
 
+    // Explaining: Define shift times for reference (though entry restrictions are removed)
     const shiftStartTime = dayjs(
       `${currentDateOnly} ${shiftStartTimeStr}`,
       "YYYY-MM-DD HH:mm:ss"
@@ -633,16 +642,25 @@ exports.registerAttendance = async (req, res) => {
     if (shiftEndTime.isBefore(shiftStartTime)) {
       shiftEndTime = shiftEndTime.add(1, "day");
     }
-    const entryWindowStart = shiftStartTime.subtract(15, "minute");
-    const exitWindowEnd = shiftEndTime.add(15, "minute");
+
+    // Explaining: Modified to allow exit only after 3:00 PM
+    const minimumExitTime = dayjs(
+      `${currentDateOnly} 15:00:00`,
+      "YYYY-MM-DD HH:mm:ss"
+    ).tz("America/Tegucigalpa", true);
+    const canMarkExit = currentDateTimeCST.isAfter(minimumExitTime);
+
+    // Explaining: Removed entry time restriction
+    // Original code (commented out for reference):
+    /*
+    const entryWindowStart = shiftStartTime;
+    const exitWindowEnd = shiftEndTime;
     const exitWindowStart = shiftStartTime;
     const canMarkEntry =
       currentDateTimeCST.isAfter(entryWindowStart) &&
       currentDateTimeCST.isBefore(shiftEndTime);
-    const canMarkExit =
-      currentDateTimeCST.isAfter(exitWindowStart) &&
-      currentDateTimeCST.isBefore(exitWindowEnd);
     const isAfterShiftEnd = currentDateTimeCST.isAfter(shiftEndTime);
+    */
 
     const [existingRecords] = await db.query(
       "SELECT hattendanceID, entryTime, exitTime FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? ORDER BY entryTime DESC LIMIT 1",
@@ -656,10 +674,13 @@ exports.registerAttendance = async (req, res) => {
     let permissionExitTime = null;
     let eventType = "";
 
-    // Obtener el userID del token para registrar quién hizo el cambio
+    // Explaining: Get userID from token for audit trail
     const userID = getUserIdFromToken(req);
 
     if (existingRecords.length === 0) {
+      // Explaining: Removed canMarkEntry check to allow entry at any time
+      // Original code (commented out for reference):
+      /*
       if (!canMarkEntry) {
         return res.status(400).json({
           message: `No se puede registrar entrada fuera del horario permitido (${entryWindowStart.format(
@@ -669,6 +690,7 @@ exports.registerAttendance = async (req, res) => {
           photoUrl,
         });
       }
+      */
       const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, STR_TO_DATE(?, '%h:%i:%s %p'), ?, ?, ?)`;
       const [result] = await db.query(query, [
         employeeID,
@@ -685,46 +707,50 @@ exports.registerAttendance = async (req, res) => {
       const latestRecord = existingRecords[0];
       eventType = "update_record";
 
-      if (!isAfterShiftEnd) {
-        const permissionStatus = await checkActivePermission(employeeID);
-        if (
-          permissionStatus.hasActivePermission &&
-          !permissionStatus.hasExitedWithPermission
-        ) {
-          const [permissionDetails] = await db.query(
-            `SELECT exitTimePermission FROM permissionattendance_emp 
-             WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
-            [employeeID, currentDateOnly]
+      // Explaining: Modified exit logic to check only for minimumExitTime (3:00 PM)
+      const permissionStatus = await checkActivePermission(employeeID);
+      if (
+        permissionStatus.hasActivePermission &&
+        !permissionStatus.hasExitedWithPermission
+      ) {
+        const [permissionDetails] = await db.query(
+          `SELECT exitTimePermission FROM permissionattendance_emp 
+           WHERE employeeID = ? AND date = ? AND isApproved = 1 AND exitPermission IS NULL`,
+          [employeeID, currentDateOnly]
+        );
+        const allowedExitTime = dayjs(
+          `${currentDateOnly} ${permissionDetails[0].exitTimePermission}`,
+          "YYYY-MM-DD HH:mm:ss"
+        ).tz("America/Tegucigalpa", true);
+        if (currentDateTimeCST.isBefore(allowedExitTime)) {
+          return res.status(400).json({
+            message: `No puedes registrar la salida con permiso hasta las ${allowedExitTime.format(
+              "h:mm A"
+            )}.`,
+            employeeName,
+            photoUrl,
+          });
+        }
+        isPermissionExit = true;
+        permissionExitTime = currentTimeFormatted;
+        const updateResult = await updatePermissionRecordWithExit(
+          permissionStatus.permissionData.permissionID,
+          currentTimeSQL
+        );
+        if (!updateResult.success) {
+          throw new Error(
+            "No se pudo actualizar el registro de permiso para salida: " +
+              (updateResult.error || "Error desconocido")
           );
-          const allowedExitTime = dayjs(
-            `${currentDateOnly} ${permissionDetails[0].exitTimePermission}`,
-            "YYYY-MM-DD HH:mm:ss"
-          ).tz("America/Tegucigalpa", true);
-          if (currentDateTimeCST.isBefore(allowedExitTime)) {
-            return res.status(400).json({
-              message: `No puedes registrar la salida con permiso hasta las ${allowedExitTime.format(
-                "h:mm A"
-              )}.`,
-              employeeName,
-              photoUrl,
-            });
-          }
-          isPermissionExit = true;
-          permissionExitTime = currentTimeFormatted;
-          const updateResult = await updatePermissionRecordWithExit(
-            permissionStatus.permissionData.permissionID,
-            currentTimeSQL
-          );
-          if (!updateResult.success) {
-            throw new Error(
-              "No se pudo actualizar el registro de permiso para salida: " +
-                (updateResult.error || "Error desconocido")
-            );
-          }
-          registrationType = "permission_exit";
-          responseMessage = "Salida con permiso registrada exitosamente";
-          attendanceID = latestRecord.hattendanceID;
-        } else {
+        }
+        registrationType = "permission_exit";
+        responseMessage = "Salida con permiso registrada exitosamente";
+        attendanceID = latestRecord.hattendanceID;
+      } else {
+        // Explaining: Modified to allow exit only after 3:00 PM
+        // Original code (commented out for reference):
+        /*
+        if (!isAfterShiftEnd) {
           return res.status(400).json({
             message: `Ya has registrado tu entrada hoy. Solo puedes registrar tu salida normal después de las ${shiftEndTime.format(
               "h:mm A"
@@ -733,7 +759,7 @@ exports.registerAttendance = async (req, res) => {
             photoUrl,
           });
         }
-      } else {
+        */
         if (canMarkExit) {
           const query = `UPDATE h_attendance_emp SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p'), updatedBy = ? WHERE hattendanceID = ?`;
           const [result] = await db.query(query, [
@@ -751,9 +777,7 @@ exports.registerAttendance = async (req, res) => {
           attendanceID = latestRecord.hattendanceID;
         } else {
           return res.status(400).json({
-            message: `No se puede registrar salida fuera del horario permitido (${exitWindowStart.format(
-              "h:mm A"
-            )} - ${exitWindowEnd.format("h:mm A")}).`,
+            message: `No se puede registrar salida antes de las 3:00 PM.`,
             employeeName,
             photoUrl,
           });
@@ -761,7 +785,7 @@ exports.registerAttendance = async (req, res) => {
       }
     }
 
-    // Emitir registro completo
+    // Explaining: Emit updated attendance record
     const fullRecord = await getSingleAttendanceRecord(
       employeeID,
       currentDateOnly
@@ -804,7 +828,7 @@ exports.registerAttendance = async (req, res) => {
   }
 };
 
-// MODIFICADO: Controlador para actualizar tiempo de asistencia con registro de ediciones
+// Explaining: Controller to update attendance time with audit trail
 exports.updateTimeAttendance = async (req, res) => {
   const { hattendanceID, field, newTime } = req.body;
 
