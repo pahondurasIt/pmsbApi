@@ -503,7 +503,7 @@ exports.getEmployeesSewing = async (req, res) => {
   try {
     const [employees] = await db.query(
       `
-        select e.employeeID, concat(e.firstName,' ', e.middleName,' ',
+        select e.employeeID, e.codeEmployee, concat(e.firstName,' ', e.middleName,' ',
             e.lastName ,' ', e.secondLastName) employeeName, e.photoUrl
         from employees_emp e
           INNER JOIN jobs_emp j on e.jobID = j.jobID
