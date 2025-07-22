@@ -1,4 +1,3 @@
-// Explaining: Importing required modules and extending dayjs with plugins
 const db = require("../config/db"); // Importa la conexión a la base de datos
 const dayjs = require("dayjs"); // Librería para manejar fechas y horas
 const ExcelJS = require("exceljs"); // Librería para manejar Excel
@@ -13,12 +12,12 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isoWeek);
 
-// Explaining: Helper function to format time with AM/PM
+// Función de ayuda para formatear la hora con AM/PM
 const formatTimeWithPeriod = (dayjsDate) => {
   return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
 };
 
-// Explaining: Helper function to get userID from JWT token
+// Función de ayuda para obtener el ID de usuario del token JWT
 const getUserIdFromToken = (req) => {
   try {
     const authHeader = req.headers.authorization;
@@ -37,7 +36,7 @@ const getUserIdFromToken = (req) => {
   }
 };
 
-// Explaining: Helper function to retrieve a complete attendance record
+// Función de ayuda para recuperar un registro completo de asistencia
 async function getSingleAttendanceRecord(employeeID, date) {
   const attendanceQuery = `
     SELECT 
@@ -106,7 +105,7 @@ async function getSingleAttendanceRecord(employeeID, date) {
   return attendanceRecord;
 }
 
-// Explaining: Helper functions for permission checks and updates
+// Funciones de ayuda para verificaciones y actualizaciones de permisos
 async function checkActivePermission(employeeID) {
   try {
     const currentDateOnly = dayjs()
@@ -174,7 +173,7 @@ async function updatePermissionRecordWithEntry(permissionID, currentTime) {
   }
 }
 
-// Explaining: Controller to fetch attendance records
+// Controlador para obtener registros de asistencia
 exports.getAttendance = async (req, res) => {
   try {
     const { startDate, endDate, specificDate } = req.query;
@@ -290,12 +289,12 @@ exports.getAttendance = async (req, res) => {
 
     res.status(200).json(processedRows);
   } catch (error) {
-    console.error("Error fetching attendance data:", error);
+    console.error("Error al obtener datos de asistencia:", error);
     res.status(500).json({ message: "Error al obtener datos de asistencia" });
   }
 };
 
-// Explaining: Controller to update permission comments
+// Controlador para actualizar comentarios de permisos
 exports.updatePermissionComment = async (req, res) => {
   try {
     const { permissionID, comment } = req.body;
@@ -332,7 +331,7 @@ exports.updatePermissionComment = async (req, res) => {
   }
 };
 
-// Explaining: Internal controller for registering dispatch
+// Controlador interno para registrar despacho
 async function registerDispatchingInternal(
   req,
   res,
@@ -449,7 +448,7 @@ async function registerDispatchingInternal(
   }
 }
 
-// Explaining: Modified registerAttendance controller with updated time restrictions
+// Controlador registerAttendance modificado para manejar correctamente las salidas de turnos nocturnos
 exports.registerAttendance = async (req, res) => {
   let employeeRecords = [];
   let shiftRecords = [];
@@ -466,7 +465,7 @@ exports.registerAttendance = async (req, res) => {
     const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
     const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
 
-    // Explaining: Fetch employee details
+    // Obtener detalles del empleado
     [employeeRecords] = await db.query(
       "SELECT firstName, middleName, lastName, photoUrl, shiftID, isActive FROM employees_emp WHERE employeeID = ?",
       [employeeID]
@@ -482,9 +481,8 @@ exports.registerAttendance = async (req, res) => {
     const employee = employeeRecords[0];
 
     if (employee.isActive === 0) {
-      const employeeNameInactive = `${employee.firstName}${
-        employee.middleName ? " " + employee.middleName : ""
-      } ${employee.lastName}`;
+      const employeeNameInactive = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
+        } ${employee.lastName}`;
       const photoUrlInactive = employee.photoUrl || "";
       return res.status(400).json({
         message: "El empleado está inactivo. No puede registrar marcaje.",
@@ -494,13 +492,12 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
-    const employeeName = `${employee.firstName}${
-      employee.middleName ? " " + employee.middleName : ""
-    } ${employee.lastName}`;
+    const employeeName = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
+      } ${employee.lastName}`;
     const photoUrl = employee.photoUrl || "";
     const shiftID = employee.shiftID;
 
-    // Explaining: Fetch shift details
+    // Obtener detalles del turno
     [shiftRecords] = await db.query(
       "SELECT startTime, endTime FROM detailsshift_emp WHERE shiftID = ?",
       [shiftID]
@@ -518,7 +515,66 @@ exports.registerAttendance = async (req, res) => {
     const shiftStartTimeStr = shift.startTime;
     const shiftEndTimeStr = shift.endTime;
 
-    // Explaining: Check for finalized records (exit or dispatch)
+    // Determine if it's a night shift
+    const isNightShift = dayjs(shiftEndTimeStr, "HH:mm:ss").isBefore(dayjs(shiftStartTimeStr, "HH:mm:ss"));
+
+    // Verificar registros no cerrados de días anteriores (para turnos nocturnos)
+    // Este bloque maneja la salida de un turno nocturno que comenzó en un día anterior.
+    if (isNightShift) {
+      const [unclosedRecords] = await db.query(
+        `SELECT hattendanceID, date FROM h_attendance_emp 
+         WHERE employeeID = ? AND entryTime IS NOT NULL AND exitTime IS NULL 
+         AND DATE(date) < ? 
+         ORDER BY date DESC LIMIT 1`,
+        [employeeID, currentDateOnly]
+      );
+
+      if (unclosedRecords.length > 0) {
+        // Si se encuentra un registro no cerrado de un día anterior, el marcaje actual se trata como una salida para ese registro.
+        const unclosedRecord = unclosedRecords[0];
+        const userID = getUserIdFromToken(req);
+
+        const query = `UPDATE h_attendance_emp SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p'), updatedBy = ? WHERE hattendanceID = ?`;
+        const [result] = await db.query(query, [
+          currentTimeFormatted,
+          userID || "1",
+          unclosedRecord.hattendanceID,
+        ]);
+
+        if (result.affectedRows === 0) {
+          throw new Error(
+            "No se pudo actualizar el registro de asistencia para salida de turno de noche."
+          );
+        }
+
+        // Emitir el registro actualizado
+        const fullRecord = await getSingleAttendanceRecord(
+          employeeID,
+          unclosedRecord.date
+        );
+        if (fullRecord) {
+          io.emit("newAttendanceRecord", {
+            type: "update_record",
+            record: fullRecord,
+          });
+        }
+
+        return res.status(201).json({
+          message: "Salida de turno de noche registrada exitosamente",
+          type: "exit_night_shift",
+          time: currentTimeFormatted,
+          employeeID,
+          employeeName,
+          photoUrl,
+          attendanceID: unclosedRecord.hattendanceID,
+          isPermissionExit: false,
+          permissionExitTime: null,
+        });
+      }
+    }
+
+    // Verificar registros finalizados (salida o despacho) para el día actual
+    // Esto evita nuevas entradas o salidas si la asistencia del día ya está cerrada.
     const [finalizedCheck] = await db.query(
       `SELECT h.exitTime, d.dispatchingID 
          FROM h_attendance_emp h 
@@ -540,7 +596,8 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
-    // Explaining: Handle pending permission return
+    // Manejar el regreso de permiso pendiente
+    // Si un empleado está fuera con permiso y necesita regresar, este bloque procesa su entrada de regreso.
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
     if (pendingReturnStatus.hasPendingReturn) {
       if (operationMode === "DESPACHO") {
@@ -562,7 +619,7 @@ exports.registerAttendance = async (req, res) => {
         if (shiftEndTime.isBefore(shiftStartTime))
           shiftEndTime = shiftEndTime.add(1, "day");
 
-        // Explaining: Retaining permission entry time window check as it was not requested to be removed
+        // Se mantiene la verificación de la ventana de tiempo de entrada de permiso ya que no se solicitó su eliminación
         if (
           !currentDateTimeCST.isAfter(shiftStartTime.subtract(1, "hour")) ||
           !currentDateTimeCST.isBefore(shiftEndTime.add(1, "hour"))
@@ -571,8 +628,8 @@ exports.registerAttendance = async (req, res) => {
             message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime
               .subtract(1, "hour")
               .format("h:mm A")} - ${shiftEndTime
-              .add(1, "hour")
-              .format("h:mm A")}).`,
+                .add(1, "hour")
+                .format("h:mm A")}).`,
             employeeName,
             photoUrl,
           });
@@ -584,10 +641,10 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para regreso: " +
-              (updateResult.error || "Error desconocido")
+            (updateResult.error || "Error desconocido")
           );
         }
-        // Emitir registro completo
+        // Emitir el registro completo
         const fullRecord = await getSingleAttendanceRecord(
           employeeID,
           currentDateOnly
@@ -618,7 +675,8 @@ exports.registerAttendance = async (req, res) => {
       }
     }
 
-    // Explaining: Handle dispatch operation
+    // Manejar la operación de despacho
+    // Si el modo de operación es 'DESPACHO', delegar a la función interna de despacho.
     if (operationMode === "DESPACHO") {
       const employeeDetails = { employeeName, photoUrl };
       const shiftDetails = { shiftEndTimeStr };
@@ -630,7 +688,8 @@ exports.registerAttendance = async (req, res) => {
       );
     }
 
-    // Explaining: Define shift times for reference (though entry restrictions are removed)
+    // Definir los tiempos de turno para referencia (aunque las restricciones de entrada han sido eliminadas)
+    // Estos se utilizan para calcular la hora de fin de turno esperada, especialmente para turnos nocturnos.
     const shiftStartTime = dayjs(
       `${currentDateOnly} ${shiftStartTimeStr}`,
       "YYYY-MM-DD HH:mm:ss"
@@ -643,27 +702,42 @@ exports.registerAttendance = async (req, res) => {
       shiftEndTime = shiftEndTime.add(1, "day");
     }
 
-    // Explaining: Modified to allow exit only after 3:00 PM
-    const minimumExitTime = dayjs(
-      `${currentDateOnly} 15:00:00`,
-      "YYYY-MM-DD HH:mm:ss"
-    ).tz("America/Tegucigalpa", true);
-    const canMarkExit = currentDateTimeCST.isAfter(minimumExitTime);
+    // Calcular la hora de salida real considerando excepciones y el día actual
+    // Esto consulta la base de datos para cualquier excepción que pueda modificar la hora de fin de turno estándar.
+    const todayDay = dayjs().locale("es").format("dddd").toUpperCase();
 
-    // Explaining: Removed entry time restriction
-    // Original code (commented out for reference):
-    /*
-    const entryWindowStart = shiftStartTime;
-    const exitWindowEnd = shiftEndTime;
-    const exitWindowStart = shiftStartTime;
-    const canMarkEntry =
-      currentDateTimeCST.isAfter(entryWindowStart) &&
-      currentDateTimeCST.isBefore(shiftEndTime);
-    const isAfterShiftEnd = currentDateTimeCST.isAfter(shiftEndTime);
-    */
+    const [exceptionRows] = await db.query(
+      `
+  SELECT 
+    ex.exceptionTime, ds.endTime
+  FROM employees_emp e
+  LEFT JOIN exceptions_emp ex ON ex.exceptionID = e.exceptionID
+  LEFT JOIN shifts_emp s ON s.shiftID = e.shiftID
+  LEFT JOIN detailsshift_emp ds ON ds.shiftID = s.shiftID
+  WHERE e.employeeID = ? AND ds.day = ?
+  `,
+      [employeeID, todayDay]
+    );
+
+    let shiftEndTimeReal = null;
+    if (exceptionRows.length > 0) {
+      const { exceptionTime, endTime } = exceptionRows[0];
+      shiftEndTimeReal = dayjs(
+        `${currentDateOnly} ${endTime}`,
+        "YYYY-MM-DD HH:mm:ss"
+      ).tz("America/Tegucigalpa", true);
+
+      if (exceptionTime > 0) {
+        shiftEndTimeReal = shiftEndTimeReal.subtract(exceptionTime, "minute");
+      }
+    } else {
+      // Si no se encuentran detalles de turno o excepciones específicas para el día actual,
+      // se utiliza la hora de fin de turno de detailsshift_emp, posiblemente ajustada para turno nocturno.
+      shiftEndTimeReal = shiftEndTime; 
+    }
 
     const [existingRecords] = await db.query(
-      "SELECT hattendanceID, entryTime, exitTime FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? ORDER BY entryTime DESC LIMIT 1",
+      "SELECT hattendanceID, entryTime, exitTime, date FROM h_attendance_emp WHERE employeeID = ? AND DATE(date) = ? ORDER BY entryTime DESC LIMIT 1",
       [employeeID, currentDateOnly]
     );
 
@@ -674,23 +748,11 @@ exports.registerAttendance = async (req, res) => {
     let permissionExitTime = null;
     let eventType = "";
 
-    // Explaining: Get userID from token for audit trail
+    // Obtener el ID de usuario del token para el registro de auditoría
     const userID = getUserIdFromToken(req);
 
     if (existingRecords.length === 0) {
-      // Explaining: Removed canMarkEntry check to allow entry at any time
-      // Original code (commented out for reference):
-      /*
-      if (!canMarkEntry) {
-        return res.status(400).json({
-          message: `No se puede registrar entrada fuera del horario permitido (${entryWindowStart.format(
-            "h:mm A"
-          )} - ${shiftEndTime.format("h:mm A")}).`,
-          employeeName,
-          photoUrl,
-        });
-      }
-      */
+      // No hay registros existentes para hoy, crear una nueva entrada
       const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, STR_TO_DATE(?, '%h:%i:%s %p'), ?, ?, ?)`;
       const [result] = await db.query(query, [
         employeeID,
@@ -707,7 +769,7 @@ exports.registerAttendance = async (req, res) => {
       const latestRecord = existingRecords[0];
       eventType = "update_record";
 
-      // Explaining: Modified exit logic to check only for minimumExitTime (3:00 PM)
+      // Manejar salidas con permiso
       const permissionStatus = await checkActivePermission(employeeID);
       if (
         permissionStatus.hasActivePermission &&
@@ -740,27 +802,20 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para salida: " +
-              (updateResult.error || "Error desconocido")
+            (updateResult.error || "Error desconocido")
           );
         }
         registrationType = "permission_exit";
         responseMessage = "Salida con permiso registrada exitosamente";
         attendanceID = latestRecord.hattendanceID;
       } else {
-        // Explaining: Modified to allow exit only after 3:00 PM
-        // Original code (commented out for reference):
-        /*
-        if (!isAfterShiftEnd) {
-          return res.status(400).json({
-            message: `Ya has registrado tu entrada hoy. Solo puedes registrar tu salida normal después de las ${shiftEndTime.format(
-              "h:mm A"
-            )} o una salida con permiso si está aprobada.`,
-            employeeName,
-            photoUrl,
-          });
-        }
-        */
-        if (canMarkExit) {
+        // Esta es la lógica principal para salidas regulares, incluyendo turnos nocturnos.
+        // Si el registro actual está abierto (tiene entrada pero no salida),
+        // y la hora actual es después de la hora de fin de turno real calculada,
+        // o si es un turno nocturno y hay un registro abierto para hoy, permitir la salida.
+        const isCurrentRecordOpen = latestRecord.entryTime !== null && latestRecord.exitTime === null;
+
+        if (isCurrentRecordOpen && (currentDateTimeCST.isAfter(shiftEndTimeReal) || isNightShift)) {
           const query = `UPDATE h_attendance_emp SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p'), updatedBy = ? WHERE hattendanceID = ?`;
           const [result] = await db.query(query, [
             currentTimeFormatted,
@@ -775,17 +830,36 @@ exports.registerAttendance = async (req, res) => {
           registrationType = "exit";
           responseMessage = "Salida registrada exitosamente";
           attendanceID = latestRecord.hattendanceID;
-        } else {
+        } else if (isCurrentRecordOpen) {
+          // Si hay un registro abierto pero aún no es hora de una salida regular
           return res.status(400).json({
-            message: `No se puede registrar salida antes de las 3:00 PM.`,
+            message: `No se puede registrar salida antes de las ${shiftEndTimeReal.format("h:mm A")}.`,
             employeeName,
             photoUrl,
           });
+        } else {
+          // Si hay un registro existente pero ya está cerrado (tiene exitTime o dispatchingID)
+          // o si es una nueva entrada para un día donde ya existe un registro cerrado.
+          // En este caso, crear una nueva entrada para el día actual.
+          const query = `INSERT INTO h_attendance_emp (employeeID, entryTime, date, createdBy, updatedBy) VALUES (?, STR_TO_DATE(?, '%h:%i:%s %p'), ?, ?, ?)`;
+          const [result] = await db.query(query, [
+            employeeID,
+            currentTimeFormatted,
+            currentDateOnly,
+            userID || "1",
+            userID || "1",
+          ]);
+          registrationType = "entry";
+          responseMessage = "Entrada registrada exitosamente";
+          attendanceID = result.insertId;
+          eventType = "new_entry";
         }
       }
     }
 
-    // Explaining: Emit updated attendance record
+    // Emitir el registro de asistencia actualizado
+    // Después de cualquier operación de asistencia exitosa (entrada, salida, permiso, despacho),
+    // emitir el registro actualizado a los clientes conectados a través de Socket.IO.
     const fullRecord = await getSingleAttendanceRecord(
       employeeID,
       currentDateOnly
@@ -813,13 +887,12 @@ exports.registerAttendance = async (req, res) => {
     const employeeInfoForError =
       employeeRecords && employeeRecords.length > 0
         ? {
-            employeeName: `${employeeRecords[0].firstName}${
-              employeeRecords[0].middleName
-                ? " " + employeeRecords[0].middleName
-                : ""
+          employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName
+            ? " " + employeeRecords[0].middleName
+            : ""
             } ${employeeRecords[0].lastName}`,
-            photoUrl: employeeRecords[0].photoUrl || "",
-          }
+          photoUrl: employeeRecords[0].photoUrl || "",
+        }
         : {};
     res.status(500).json({
       message: "Error interno del servidor al registrar la asistencia.",
@@ -828,7 +901,9 @@ exports.registerAttendance = async (req, res) => {
   }
 };
 
-// Explaining: Controller to update attendance time with audit trail
+// Controlador para actualizar la hora de asistencia con registro de auditoría
+// Esta función permite actualizaciones manuales de entryTime o exitTime para un registro de asistencia,
+// e incluye un registro de auditoría actualizando el campo 'updatedBy'.
 exports.updateTimeAttendance = async (req, res) => {
   const { hattendanceID, field, newTime } = req.body;
 
@@ -838,7 +913,7 @@ exports.updateTimeAttendance = async (req, res) => {
       .json({ message: "Datos incompletos para la actualización." });
   }
 
-  // Validar que el campo a actualizar sea uno de los permitidos.
+  // Validar que el campo a actualizar sea permitido.
   const allowedFields = ["entryTime", "exitTime"];
   if (!allowedFields.includes(field)) {
     return res
@@ -848,7 +923,7 @@ exports.updateTimeAttendance = async (req, res) => {
       });
   }
 
-  // Validar formato de tiempo (hh:mm:ss AM/PM)
+  // Validar el formato de la hora (hh:mm:ss AM/PM)
   const timeRegex =
     /^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])\s?(AM|PM|am|pm)$/i;
   if (!timeRegex.test(newTime)) {
@@ -861,7 +936,7 @@ exports.updateTimeAttendance = async (req, res) => {
   }
 
   try {
-    // Obtener el userID del token
+    // Obtener el ID de usuario del token para el registro de auditoría
     const userID = getUserIdFromToken(req);
     if (!userID) {
       return res
@@ -871,7 +946,7 @@ exports.updateTimeAttendance = async (req, res) => {
         });
     }
 
-    // Obtener el employeeID, date y el valor actual del campo antes de la actualización
+    // Obtener employeeID, fecha y el valor actual del campo antes de actualizar
     const [attendanceRecord] = await db.query(
       `SELECT employeeID, date, DATE_FORMAT(${field}, '%h:%i:%s %p') as currentTime FROM h_attendance_emp WHERE hattendanceID = ?`,
       [hattendanceID]
@@ -888,7 +963,7 @@ exports.updateTimeAttendance = async (req, res) => {
     const { employeeID, date, currentTime } = attendanceRecord[0];
     const oldTime = currentTime || "Sin valor";
 
-    // Actualizar el campo de tiempo
+    // Actualizar el campo de tiempo en la base de datos
     const updateQuery = `
       UPDATE h_attendance_emp
       SET ${field} = STR_TO_DATE(CONCAT(DATE(date), ' ', ?), '%Y-%m-%d %h:%i:%s %p'), updatedBy = ?
@@ -907,7 +982,7 @@ exports.updateTimeAttendance = async (req, res) => {
         .json({ message: "No se pudo actualizar el registro de asistencia." });
     }
 
-    // Emitir el registro actualizado con el historial de ediciones
+    // Emitir el registro actualizado con el historial de edición
     const fullRecord = await getSingleAttendanceRecord(employeeID, date);
     if (fullRecord) {
       io.emit("newAttendanceRecord", {
@@ -916,6 +991,7 @@ exports.updateTimeAttendance = async (req, res) => {
       });
     }
 
+    // Enviar respuesta de éxito
     return res.status(200).json({
       success: true,
       message: "Hora actualizada correctamente.",
