@@ -23,13 +23,14 @@ exports.getPermissionData = async (req, res) => {
           employees_emp e
           INNER JOIN h_attendance_emp a ON e.employeeID = a.employeeID
       WHERE
-          DATE(a.date) = ?
+          a.date = ?
           AND NOT EXISTS (
               SELECT 1
               FROM dispatching_emp d
         WHERE d.employeeID = e.employeeID
+          AND d.date = ?
     );`,
-      [currentDate]
+      [currentDate, currentDate]
     );
 
     let currentTime = dayjs().format("HH:mm:ss");
@@ -107,11 +108,9 @@ exports.markPermissionAsPaid = async (req, res) => {
       [isPaid, ...camposAuditoriaUPDATE, permissionID]
     );
     if (results.affectedRows === 0) {
-      return res
-        .status(500)
-        .json({
-          message: "Permiso no encontrado o ya está marcado como pagado.",
-        });
+      return res.status(500).json({
+        message: "Permiso no encontrado o ya está marcado como pagado.",
+      });
     }
     res.json(results);
   } catch (err) {
@@ -209,31 +208,10 @@ exports.authorizePermission = async (req, res) => {
 
     if (result.affectedRows === 1) {
       const insertedId = result.insertId;
-
-      const [permissionResults] = await db.query(
-        `
-        SELECT 
-            CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), 
-            ' ', e.lastName,  ' ', e.secondLastName) as fullName,
-            e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
-            pa.date, pa.exitTimePermission, pa.entryTimePermission,
-            pa.exitPermission, pa.entryPermission, pa.IsApproved
-          FROM
-          permissionattendance_emp pa
-            INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
-            INNER JOIN employees_emp e on e.employeeID = pa.employeeID
-            INNER JOIN jobs_emp j on e.jobID = j.jobID
-          where pa.date = DATE(NOW()) and IsApproved
-          and pa.permissionID = ?
-        `,
-        [insertedId]
-      );
-
       res.status(201).json({
         success: true,
         message: "Permiso autorizado y registrado correctamente.",
         permissionId: insertedId,
-        savedData: permissionResults[0] || null,
       });
     } else {
       throw new Error(

@@ -488,7 +488,7 @@ exports.getSupervisorSewing = async (req, res) => {
         e.middleName,' ',e.lastName ,' ', e.secondLastName) supervisorName
         from employees_emp e
         INNER JOIN jobs_emp j on e.jobID = j.jobID
-        where e.isActive = 1 and e.jobID = 74;
+        where e.isActive = 1 and e.jobID = 62;
       `
     );
 
