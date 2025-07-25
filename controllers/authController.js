@@ -115,7 +115,7 @@ exports.login = async (req, res) => {
     // 7. Obtener pantalla permitida para el usuario
     const [userScreens] = await db.query(
       `select 
-        u.userID, u.username, r.rolID, r.rolName, sr.screenByRolID, s.screenID, s.screenName
+        u.userID, u.username, r.rolID, r.rolName, sr.screenByRolID, s.screenID, s.screenName, s.path
         from 
         users_us u 
         inner join roles_us r on r.rolID = u.rolID
@@ -128,7 +128,7 @@ exports.login = async (req, res) => {
     // 8. Obtener permisos para pantallas segun el usuario
     const [userPermissions] = await db.query(
       `select 
-        u.userID, u.username, r.rolID, r.rolName, pr.permissionbyrolID, pr.permissionScreenID, ps.permissionName
+        ps.permissionName
         from 
         users_us u 
         inner join roles_us r on r.rolID = u.rolID
@@ -139,6 +139,10 @@ exports.login = async (req, res) => {
       [user.userID]
     );
 
+    // crear array de permisos
+    const permissionsArray = userPermissions.map(
+      (permission) => permission.permissionName
+    );
     res.status(200).json({
       message: "Inicio de sesión exitoso.",
       token,
@@ -149,7 +153,7 @@ exports.login = async (req, res) => {
         status: user.statusName,
         associatedLocations: associatedLocations,
       },
-      permissions: userPermissions,
+      permissions: permissionsArray,
       screens: userScreens,
     });
   } catch (error) {
