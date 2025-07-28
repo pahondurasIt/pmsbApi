@@ -115,7 +115,7 @@ exports.login = async (req, res) => {
     // 7. Obtener pantalla permitida para el usuario
     const [userScreens] = await db.query(
       `select 
-        u.userID, u.username, r.rolID, r.rolName, sr.screenByRolID, s.screenID, s.screenName, s.path
+        s.screenID, s.screenName, s.path, s.component
         from 
         users_us u 
         inner join roles_us r on r.rolID = u.rolID
