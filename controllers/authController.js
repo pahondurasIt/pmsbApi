@@ -114,28 +114,28 @@ exports.login = async (req, res) => {
 
     // 7. Obtener pantalla permitida para el usuario
     const [userScreens] = await db.query(
-      `select 
-        s.screenID, s.screenName, s.path, s.component
-        from 
+      `select
+          u.userID, u.username, s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName
+          from 
         users_us u 
-        inner join roles_us r on r.rolID = u.rolID
-        inner join screenbyrol_us sr on sr.rolID = r.rolID
-        inner join screen_us s on s.screenID = sr.screenID
-        where u.userID = ?`,
+          inner join profilebyuser_us pro on pro.userId = u.userID
+          inner join permissionscreen_us ps on ps.permissionScreenID = pro.permissionScreenID
+          inner join screen_us s on s.screenID = ps.screenID
+          inner join module_us m on m.moduleID = s.moduleID
+        where u.userID = ?
+        group by u.userID, u.username, s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName;`,
       [user.userID]
     );
 
     // 8. Obtener permisos para pantallas segun el usuario
     const [userPermissions] = await db.query(
       `select 
-        ps.permissionName
+          ps.permissionName
         from 
-        users_us u 
-        inner join roles_us r on r.rolID = u.rolID
-        inner join permissionbyrol_us pr on pr.rolID = r.rolID
-        inner join permissionscreen_us ps on ps.permissionScreenID = pr.permissionScreenID
-       WHERE
-          u.userID = ?`,
+          users_us u 
+          inner join profilebyuser_us pro on pro.userId = u.userID
+          inner join permissionscreen_us ps on ps.permissionScreenID = pro.permissionScreenID
+        where u.userID = ?`,
       [user.userID]
     );
 
