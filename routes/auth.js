@@ -9,4 +9,5 @@ router.post('/', authController.login);
 router.post('/login-despacho', authController.loginDespacho); // Ruta para verificar el estado del usuario
 // Puedes añadir otras rutas relacionadas con la autenticación aquí, como /register, /logout, etc.
 
+// router.post('/user-control', authController.userControl); // Ruta para controlar el acceso de usuarios
 module.exports = router;

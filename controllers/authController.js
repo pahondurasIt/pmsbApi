@@ -261,3 +261,8 @@ exports.loginDespacho = async (req, res) => {
     res.status(500).json({ message: "Error interno del servidor." });
   }
 };
+
+// // NUEVO: Endpoint para controlar el acceso de usuarios
+// exports.userControl = async (req, res) => {
+
+// }
