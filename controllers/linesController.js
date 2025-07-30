@@ -34,13 +34,14 @@ exports.getLines = async (req, res) => {
 exports.createLine = async (req, res) => {
   try {
     const { linesNumber, supervisorID, companyID } = req.body;
+
     const [result] = await db.query(
       `
             INSERT INTO lines_emp (linesNumber, supervisorID, companyID, createDate,
             createBy, updateDate, updateBy)
             VALUES (?, ?, ?, ?);
       `,
-      [linesNumber, supervisorID, companyID, camposAuditoriaADD]
+      [linesNumber, supervisorID, companyID, camposAuditoriaADD(req)]
     );
 
     res.json({
@@ -59,9 +60,6 @@ exports.createLine = async (req, res) => {
 // Actualizar una línea existente
 exports.updateLine = async (req, res) => {
   try {
-    console.log(req.body);
-    console.log(req.params.linesID);
-
     const { linesNumber, supervisorID } = req.body;
     await db.query(
       `
@@ -69,7 +67,12 @@ exports.updateLine = async (req, res) => {
             SET linesNumber = ?, supervisorID = ?, updateDate = ?, updateBy = ?
             WHERE linesID = ?;
       `,
-      [linesNumber, supervisorID, ...camposAuditoriaUPDATE, req.params.linesID]
+      [
+        linesNumber,
+        supervisorID,
+        ...camposAuditoriaUPDATE(req),
+        req.params.linesID,
+      ]
     );
 
     res.json({
@@ -146,17 +149,16 @@ exports.addEmployeeToLine = async (req, res) => {
       [employeeID]
     );
     if (employeeAsignado.length > 0) {
-      await db.query(
-        `Delete from employeelines_emp where employeeID = ?;`,
-        [employeeID]
-      );
+      await db.query(`Delete from employeelines_emp where employeeID = ?;`, [
+        employeeID,
+      ]);
     }
     const [result] = await db.query(
       `
             INSERT INTO employeelines_emp (employeeID, linesID, createDate, createBy, updateDate, updateBy)
             VALUES (?, ?, ?);
       `,
-      [employeeID, linesID, camposAuditoriaADD]
+      [employeeID, linesID, camposAuditoriaADD(req)]
     );
 
     if (result.affectedRows === 0) {

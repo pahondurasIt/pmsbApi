@@ -73,7 +73,7 @@ exports.createNewAddress = async (req, res) => {
     switch (opButton) {
       case 'city':
         const resultCity = await db.query(`INSERT INTO cities_emp 
-          (cityName, stateID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, stateID, camposAuditoriaADD]);
+          (cityName, stateID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, stateID, camposAuditoriaADD(req)]);
 
         if (resultCity.affectedRows === 0) {
           return res.status(500).json({ message: 'Error al crear la ciudad' });
@@ -84,7 +84,7 @@ exports.createNewAddress = async (req, res) => {
 
       case 'sector':
         const resultSector = await db.query(`INSERT INTO sectors_emp 
-          (sectorName, cityID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, cityID, camposAuditoriaADD]);
+          (sectorName, cityID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, cityID, camposAuditoriaADD(req)]);
 
         if (resultSector.affectedRows === 0) {
           return res.status(500).json({ message: 'Error al crear el sector' });
@@ -94,7 +94,7 @@ exports.createNewAddress = async (req, res) => {
         return res.status(200).json({ ...newSector[0] });
       case 'suburb':
         const resultSuburb = await db.query(`INSERT INTO suburbs_emp 
-          (suburbName, sectorID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, sectorID, camposAuditoriaADD]);
+          (suburbName, sectorID, createdDate, createdBy, updatedDate, updatedBy) VALUES (?, ?, ?)`, [newValue, sectorID, camposAuditoriaADD(req)]);
 
         if (resultSuburb.affectedRows === 0) {
           return res.status(500).json({ message: 'Error al crear el suburbio' });

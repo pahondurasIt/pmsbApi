@@ -5,7 +5,7 @@ const utc = require("dayjs/plugin/utc"); // Plugin para manejar UTC
 const timezone = require("dayjs/plugin/timezone"); // Plugin para manejar zonas horarias
 const isoWeek = require("dayjs/plugin/isoWeek"); // Plugin para manejar semanas ISO
 const { io } = require("../app"); // Importar la instancia de Socket.IO
-const jwt = require("jsonwebtoken"); // Para decodificar el token JWT
+const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 
 // Extender dayjs con los plugins de UTC, Timezone e ISO Week
 dayjs.extend(utc);
@@ -15,25 +15,6 @@ dayjs.extend(isoWeek);
 // Función de ayuda para formatear la hora con AM/PM
 const formatTimeWithPeriod = (dayjsDate) => {
   return dayjsDate.format("hh:mm:ss A"); // Formato hh:mm:ss AM/PM
-};
-
-// Función de ayuda para obtener el ID de usuario del token JWT
-const getUserIdFromToken = (req) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return null;
-    }
-
-    const token = authHeader.substring(7); // Remover 'Bearer '
-    const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key";
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    return decoded.id; // Retorna el userID del token
-  } catch (error) {
-    console.error("Error al decodificar token JWT:", error);
-    return null;
-  }
 };
 
 // Función de ayuda para recuperar un registro completo de asistencia
