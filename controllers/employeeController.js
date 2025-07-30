@@ -201,7 +201,7 @@ exports.updateEvaluation = async (req, res) => {
 
     const [result] = await db.query(
       `UPDATE employees_emp SET evaluationStep = ?, updatedDate= ?, updatedBy = ? WHERE employeeID = ?`,
-      [evaluationStep, ...camposAuditoriaUPDATE, employeeID]
+      [evaluationStep, ...camposAuditoriaUPDATE(req), employeeID]
     );
 
     if (result.affectedRows === 0) {
@@ -301,7 +301,7 @@ exports.createEmployee = async (req, res) => {
         req.body.employeeData.incapacitated,
         req.body.employeeData.salary,
         req.body.employeeData.relatives,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req), // Fecha y usuario de creación
       ]
     );
     await db.query(
@@ -338,7 +338,7 @@ exports.createEmployee = async (req, res) => {
           x.birthCert,
           x.genderID,
           employeeID,
-          camposAuditoriaADD,
+          camposAuditoriaADD(req),
         ]
       );
     });
@@ -367,7 +367,7 @@ exports.createEmployee = async (req, res) => {
           x.secondLastName,
           x.age,
           employeeID,
-          camposAuditoriaADD,
+          camposAuditoriaADD(req),
         ]
       );
     });
@@ -404,7 +404,7 @@ exports.createEmployee = async (req, res) => {
           x.relativesTypeID,
           x.phoneNumber,
           employeeID,
-          camposAuditoriaADD,
+          camposAuditoriaADD(req),
         ]
       );
     });
@@ -453,7 +453,7 @@ exports.createEmployee = async (req, res) => {
           x.relativesTypeID,
           x.phoneNumber,
           employeeID,
-          camposAuditoriaADD,
+          camposAuditoriaADD(req),
         ]
       );
     });
@@ -579,7 +579,7 @@ exports.updateEmployee = async (req, res) => {
         req.body.employeeData.nationality,
         req.body.employeeData.salary,
         req.body.employeeData.relatives,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         employeeID,
       ]
     );
@@ -619,7 +619,7 @@ exports.disabledEmployee = async (req, res) => {
         req.body.dismissalTypeID,
         req.body.employeeID,
         req.body.comment,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req),
       ]
     );
 
@@ -633,7 +633,7 @@ exports.disabledEmployee = async (req, res) => {
         dayjs(req.body.dateDismissal)
           .tz("America/Tegucigalpa")
           .format("YYYY-MM-DD"),
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.body.employeeID,
       ]
     );
@@ -697,7 +697,7 @@ exports.addChild = async (req, res) => {
         birthCert,
         genderID,
         req.params.employeeID,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req),
       ]
     );
     res.json({ childrenID: result.insertId });
@@ -741,7 +741,7 @@ exports.updateChild = async (req, res) => {
         dayjs(birthDate).format("YYYY-MM-DD"),
         birthCert,
         genderID,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.params.childrenID,
       ]
     );
@@ -789,7 +789,7 @@ exports.addFamilyInfo = async (req, res) => {
         formatNamePart(secondLastName),
         age,
         req.params.employeeID,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req),
       ]
     );
     res.json({ familyInfoID: result.insertId });
@@ -832,7 +832,7 @@ exports.updateFamilyInfo = async (req, res) => {
         formatNamePart(lastName),
         formatNamePart(secondLastName),
         age,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.params.familyInfoID,
       ]
     );
@@ -898,7 +898,7 @@ exports.addEContact = async (req, res) => {
         relativesTypeID,
         phoneNumber,
         req.params.employeeID,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req),
       ]
     );
     res.json({ econtactID: result.insertId });
@@ -947,7 +947,7 @@ exports.updateEContact = async (req, res) => {
         suburbID,
         relativesTypeID,
         phoneNumber,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.params.econtactID,
       ]
     );
@@ -993,7 +993,7 @@ exports.addAuxRelative = async (req, res) => {
         relativesTypeID,
         parseInt(req.params.employeeID),
         employeeID,
-        ...camposAuditoriaADD,
+        ...camposAuditoriaADD(req),
       ]
     );
     res.json({ auxRelativeID: result.insertId });
@@ -1019,7 +1019,7 @@ exports.updateAuxRelative = async (req, res) => {
       [
         relativesTypeID,
         employeeID,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.params.auxRelativeID,
       ]
     );
@@ -1094,7 +1094,7 @@ exports.addBeneficiaryInfo = async (req, res) => {
         relativesTypeID,
         phoneNumber,
         req.params.employeeID,
-        camposAuditoriaADD,
+        camposAuditoriaADD(req),
       ]
     );
     res.json({ beneficiaryID: result.insertId });
@@ -1136,7 +1136,7 @@ exports.updateBeneficiaryInfo = async (req, res) => {
         percentage,
         relativesTypeID,
         phoneNumber,
-        ...camposAuditoriaUPDATE,
+        ...camposAuditoriaUPDATE(req),
         req.params.beneficiaryID,
       ]
     );

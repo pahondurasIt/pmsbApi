@@ -105,7 +105,7 @@ exports.markPermissionAsPaid = async (req, res) => {
       SET isPaid = ?, updatedDate = ?, updatedBy = ?
       WHERE permissionID = ?
     `,
-      [isPaid, ...camposAuditoriaUPDATE, permissionID]
+      [isPaid, ...camposAuditoriaUPDATE(req), permissionID]
     );
     if (results.affectedRows === 0) {
       return res.status(500).json({

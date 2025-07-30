@@ -115,7 +115,7 @@ exports.login = async (req, res) => {
     // 7. Obtener pantalla permitida para el usuario
     const [userScreens] = await db.query(
       `select
-          u.userID, u.username, s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName
+          s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName
           from 
         users_us u 
           inner join profilebyuser_us pro on pro.userId = u.userID
@@ -123,7 +123,8 @@ exports.login = async (req, res) => {
           inner join screen_us s on s.screenID = ps.screenID
           inner join module_us m on m.moduleID = s.moduleID
         where u.userID = ?
-        group by u.userID, u.username, s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName;`,
+        group by s.screenID, s.screenName, s.path, s.component, m.moduleID, m.moduleName
+        order by screenID asc;`,
       [user.userID]
     );
 
@@ -136,6 +137,22 @@ exports.login = async (req, res) => {
           inner join profilebyuser_us pro on pro.userId = u.userID
           inner join permissionscreen_us ps on ps.permissionScreenID = pro.permissionScreenID
         where u.userID = ?`,
+      [user.userID]
+    );
+
+    // 9. Obtener modulos permitidos para el usuario
+    const [userModules] = await db.query(
+      `select
+          m.moduleID, m.moduleName
+        from
+          users_us u
+          inner join profilebyuser_us pro on pro.userId = u.userID
+          inner join permissionscreen_us ps on ps.permissionScreenID = pro.permissionScreenID
+          inner join screen_us s on s.screenID = ps.screenID
+          inner join module_us m on m.moduleID = s.moduleID
+        where u.userID = ?
+        group by m.moduleID, m.moduleName
+        order by m.moduleID asc;`,
       [user.userID]
     );
 
@@ -155,6 +172,7 @@ exports.login = async (req, res) => {
       },
       permissions: permissionsArray,
       screens: userScreens,
+      modules: userModules,
     });
   } catch (error) {
     console.error("Error en el login:", error);
