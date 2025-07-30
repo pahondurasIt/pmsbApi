@@ -5,7 +5,6 @@ const db = require("../config/db"); // Ajusta la ruta a tu archivo de configurac
 
 // Se recomienda usar una variable de entorno para tu JWT_SECRET
 const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key"; // ¡CAMBIA ESTA CLAVE POR UNA MUY SEGURA!
-
 exports.login = async (req, res) => {
   const { username, password } = req.body;
 
@@ -262,7 +261,104 @@ exports.loginDespacho = async (req, res) => {
   }
 };
 
-// // NUEVO: Endpoint para controlar el acceso de usuarios
-// exports.userControl = async (req, res) => {
+// NUEVO: Endpoint para obtener todos los usuarios
+exports.getAllUsers = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT
+                 u.username,
+                 us.userStatusID
+              FROM
+                 users_us u
+              INNER JOIN
+                 userstatus_us us ON u.userStatusID = us.userStatusID`
+    );
 
-// }
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "No se encontraron usuarios." });
+    }
+
+    res.status(200).json({ users: rows });
+  } catch (error) {
+    console.error("Error al obtener usuarios:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+};
+
+
+exports.getAllCompanies = async (req, res) => {
+   try {
+     const [rows] = await db.query(
+       `SELECT
+                 companyID,
+                 companyName,
+                 companyDescription
+              FROM
+                 companies_us`
+     );
+
+     if (rows.length === 0) {
+      return res.status(404).json({ message: "No se encontraron compañías." });
+     }
+
+     res.status(200).json({ companies: rows });
+   } catch (error) {
+     console.error("Error al obtener compañías:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+ };
+ 
+exports.createuser = async (req, res) => {
+  const { firstName, lastName, username, email, password, companyID } = req.body;
+
+  if (!firstName || !lastName || !username || !email || !password || !companyID) {
+    return res.status(400).json({ message: "Todos los campos son requeridos." });
+  }
+
+  try {
+    // Verificar si el nombre de usuario ya existe
+    const [existingUser] = await db.query(
+      "SELECT username FROM users_us WHERE username = ?",
+      [username]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(409).json({ message: "El nombre de usuario ya existe." });
+    }
+
+    // Verificar si el email ya existe
+    const [existingEmail] = await db.query(
+      "SELECT email FROM users_us WHERE email = ?",
+      [email]
+    );
+
+    if (existingEmail.length > 0) {
+      return res.status(409).json({ message: "El email ya existe." });
+    }
+
+    // Hashear la contraseña
+    const hashedPassword = await bcrypt.hash(password, 10); // 10 es el saltRounds
+
+    // Obtener la fecha y hora actual
+    const currentDateTime = new Date();
+
+    // Insertar el nuevo usuario en la base de datos
+    const [result] = await db.query(
+      "INSERT INTO users_us (firstName, lastName, username, email, passwordHash, userStatusID, passwordLastChanged) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [firstName, lastName, username, email, hashedPassword, 1, currentDateTime] // userStatusID 1 es 'Activo'
+    );
+
+    const newUserID = result.insertId;
+
+    // Insertar la relación usuario-compañía en la tabla usercompany_us
+    await db.query(
+      "INSERT INTO usercompany_us (userID, companyID) VALUES (?, ?)",
+      [newUserID, companyID]
+    );
+
+    res.status(201).json({ message: "Usuario creado exitosamente", userId: newUserID });
+  } catch (error) {
+    console.error("Error al crear usuario:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+}

@@ -340,12 +340,12 @@ async function registerDispatchingInternal(
 ) {
   const { employeeID } = req.body;
   const currentDateTimeCST = dayjs().tz("America/Tegucigalpa");
-  const currentTimeSQL = currentDateTimeCST.format("YYYY-MM-DD hh:mm:ss A");
   const currentDateOnly = currentDateTimeCST.format("YYYY-MM-DD");
   const currentTimeFormatted = formatTimeWithPeriod(currentDateTimeCST);
 
   const { employeeName, photoUrl } = employeeDetails;
-  const { shiftEndTimeStr } = shiftDetails;
+  const defaultExitTime = "04:45:00 PM"; // Hora de salida por defecto
+  const scheduledExitTimeSQL = `${currentDateOnly} ${defaultExitTime}`;
 
   try {
     const pendingReturnStatus = await checkPendingPermissionReturn(employeeID);
@@ -400,16 +400,18 @@ async function registerDispatchingInternal(
     ];
     const [resultDispatch] = await db.query(insertDispatchQuery, values);
 
-    const scheduledExitTimeSQL = `${currentDateOnly} ${shiftEndTimeStr}`;
+    const scheduledExitTimeSQL = `${currentDateOnly} ${defaultExitTime}`;
+
     const updateAttendanceQuery = `
         UPDATE h_attendance_emp 
-        SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p')
+        SET exitTime = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p')
         WHERE hattendanceID = ?
     `;
     const [resultAttendanceUpdate] = await db.query(updateAttendanceQuery, [
-      currentTimeFormatted,
+      scheduledExitTimeSQL,
       attendanceIDToUpdate,
     ]);
+    
     if (resultAttendanceUpdate.affectedRows === 0) {
       console.error(
         `Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`
@@ -431,7 +433,7 @@ async function registerDispatchingInternal(
     return res.status(201).json({
       message:
         "Despacho registrado exitosamente. Tu hora de salida ha sido establecida a las " +
-        formatTimeWithPeriod(dayjs(scheduledExitTimeSQL)),
+        defaultExitTime,
       type: "dispatching",
       time: currentTimeFormatted,
       employeeID,
