@@ -15,28 +15,27 @@ const io = socketIO(server, {
 // Exportar la instancia de io para que pueda ser utilizada en otros módulos
 module.exports.io = io;
 
-const employeeRoutes = require('./routes/employee');
-const genderRoutes = require('./routes/gender');
-const countriesRoutes = require('./routes/countries');
-const statesRoutes = require('./routes/states');
-const citiesRoutes = require('./routes/cities');
-const maritalStatusRoutes = require('./routes/maritalStatus');
-const educationLevelRoutes = require('./routes/educationLevel');
-const bloodtypeRoutes = require('./routes/bloodtype');
-const transportationRoutes = require('./routes/transportation');
-const dataFormRoutes = require('./routes/dataForm');
-const attendanceRoutes = require('./routes/attendance');
-const registrosRoutes = require('./routes/registros');
-const permissionRoutes = require('./routes/permission');
-const exportattendanceRoutes = require('./routes/exportattendance');
-const authRoutes = require('./routes/auth');
-const linesRoutes = require('./routes/lines');
-const thermalPrinterRoutes = require('./routes/thermalPrinter');
-const logdispatchingRoutes = require('./routes/logdispatching');
-const formAddTimeRoutes = require('./routes/formaddtime');
-// const exportEmployeeRoute = require('./routes/exportemployee');
-
-
+const employeeRoutes = require("./routes/employee");
+const genderRoutes = require("./routes/gender");
+const countriesRoutes = require("./routes/countries");
+const statesRoutes = require("./routes/states");
+const citiesRoutes = require("./routes/cities");
+const maritalStatusRoutes = require("./routes/maritalStatus");
+const educationLevelRoutes = require("./routes/educationLevel");
+const bloodtypeRoutes = require("./routes/bloodtype");
+const transportationRoutes = require("./routes/transportation");
+const dataFormRoutes = require("./routes/dataForm");
+const attendanceRoutes = require("./routes/attendance");
+const registrosRoutes = require("./routes/registros");
+const permissionRoutes = require("./routes/permission");
+const exportattendanceRoutes = require("./routes/exportattendance");
+const authRoutes = require("./routes/auth");
+const linesRoutes = require("./routes/lines");
+const thermalPrinterRoutes = require("./routes/thermalPrinter");
+const logdispatchingRoutes = require("./routes/logdispatching");
+const formAddTimeRoutes = require("./routes/formaddtime");
+const usuariosRoutes = require("./routes/usuario"); // Usar las rutas de usuarios
+const exportEmployeeRoute = require("./routes/exportemployee");
 
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -76,7 +75,7 @@ app.use("/api/thermalPrinter", thermalPrinterRoutes);
 app.use("/api/logdispatching", logdispatchingRoutes);
 app.use("/api/formaddtime", formAddTimeRoutes);
 app.use("/api/usuarios", usuariosRoutes); // Usar las rutas de usuarios
-app.use('/api/exportemployee', exportEmployeeRoute);
+app.use("/api/exportemployee", exportEmployeeRoute);
 
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);
