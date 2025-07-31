@@ -7,6 +7,7 @@ const authController = require('../controllers/authController'); // Ajusta la ru
 router.post('/', authController.login);
 
 router.post('/login-despacho', authController.loginDespacho); // Ruta para verificar el estado del usuario
+
 // Puedes añadir otras rutas relacionadas con la autenticación aquí, como /register, /logout, etc.
 router.get('/user-list', authController.getAllUsers); 
 
