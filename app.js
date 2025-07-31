@@ -34,7 +34,8 @@ const linesRoutes = require('./routes/lines');
 const thermalPrinterRoutes = require('./routes/thermalPrinter');
 const logdispatchingRoutes = require('./routes/logdispatching');
 const formAddTimeRoutes = require('./routes/formaddtime');
-// const exportEmployeeRoute = require('./routes/exportemployee');
+const usuariosRoutes = require('./routes/usuario'); // Asegúrate de que esta ruta es correcta
+const exportEmployeeRoute = require('./routes/exportemployee');
 
 
 
