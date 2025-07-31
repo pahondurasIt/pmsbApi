@@ -107,3 +107,48 @@ exports.createProfileByUser = async (req, res) => {
     res.status(500).json({ message: "Error al crear perfil de usuario" });
   }
 };
+
+//Modulos cuchao
+exports.getModules = async (req, res) => {
+try {
+    const [modules] = await db.query(
+      `SELECT 
+      moduleID, 
+      moduleName 
+      FROM module_us;`
+    );
+
+    res.json(modules);
+  }catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener módulos" });
+  }
+
+}
+
+//Pantallas cuchao
+exports.getScreens = async (req, res) => {
+  const {moduleID} = req.params;
+  try {
+    const [rows] = await db.query(
+      `SELECT 
+      screenID, 
+      screenName
+      FROM screen_us
+      WHERE moduleID = ?;`,
+      [moduleID]
+    );
+
+    res.status(200).json({ modules: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener pantallas" });
+  }
+}
+
+//Permisos para las pantallas cuchao
+exports.getPantallas = async (req, res) => {
+
+
+
+}

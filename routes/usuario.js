@@ -9,4 +9,6 @@ router.get('/permissions', userController.getPermissions);
 router.get('/permissionsByUser/:userID', userController.getPermissionById);
 router.post('/userProfile', userController.createProfileByUser);
 
+router.get('/modules', userController.getModules);
+router.get('/screens/:moduleID', userController.getScreens);
 module.exports = router;
