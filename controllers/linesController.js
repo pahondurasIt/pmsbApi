@@ -37,9 +37,8 @@ exports.createLine = async (req, res) => {
 
     const [result] = await db.query(
       `
-            INSERT INTO lines_emp (linesNumber, supervisorID, companyID, createDate,
-            createBy, updateDate, updateBy)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO lines_emp (linesNumber, supervisorID, companyID, createDate, createBy)
+            VALUES (?, ?, ?, ?, ?);
       `,
       [linesNumber, supervisorID, companyID, camposAuditoriaADD(req)]
     );
@@ -155,7 +154,7 @@ exports.addEmployeeToLine = async (req, res) => {
     }
     const [result] = await db.query(
       `
-            INSERT INTO employeelines_emp (employeeID, linesID, createDate, createBy, updateDate, updateBy)
+            INSERT INTO employeelines_emp (employeeID, linesID, createDate, createBy)
             VALUES (?, ?, ?);
       `,
       [employeeID, linesID, camposAuditoriaADD(req)]

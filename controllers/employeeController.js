@@ -253,7 +253,7 @@ exports.createEmployee = async (req, res) => {
           birthDate, bloodTypeID, cityID, stateID, sectorID, suburbID, address, gabachSize, shirtSize, divisionID,
           departmentID, areaID, jobID, hireDate, endDate, isActive, partnerName, partnerage, companyID,
           employeeTypeID, contractTypeID, payrollTypeID, shiftID, educationLevelID, educationGrade, transportTypeID, 
-          maritalStatusID, nationality, evaluationStep, incapacitated, salary, relatives, createdDate, createdBy, updatedDate, updatedBy
+          maritalStatusID, nationality, evaluationStep, incapacitated, salary, relatives, createdDate, createdBy
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
       [
@@ -314,19 +314,8 @@ exports.createEmployee = async (req, res) => {
 
     req.body.childrenList.forEach(async (x) => {
       await db.query(
-        `INSERT INTO children_emp (
-            firstName,
-            middleName,
-            lastName,
-            secondLastName,
-            birthDate,
-            birthCert,
-            genderID,
-            employeeID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
+        `INSERT INTO children_emp (firstName, middleName, lastName, secondLastName,
+            birthDate, birthCert, genderID, employeeID, createdDate, createdBy
             )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ? )`,
         [
@@ -345,18 +334,8 @@ exports.createEmployee = async (req, res) => {
 
     req.body.familyList.forEach(async (x) => {
       await db.query(
-        `INSERT INTO familyinformation_emp (
-            relativesTypeID,
-            firstName,
-            middleName,
-            lastName,
-            secondLastName,
-            age,
-            employeeID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
+        `INSERT INTO familyinformation_emp (relativesTypeID, firstName, middleName, lastName,
+            secondLastName, age, employeeID, createdDate, createdBy
             )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -374,22 +353,9 @@ exports.createEmployee = async (req, res) => {
 
     req.body.emergencyList.forEach(async (x) => {
       await db.query(
-        `INSERT INTO econtacts_emp (
-            firstName,
-            middleName,
-            lastName,
-            secondLastName,
-            stateID,
-            cityID,
-            sectorID,
-            suburbID,
-            relativesTypeID,
-            phoneNumber,
-            employeeID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
+        `INSERT INTO econtacts_emp (firstName, middleName, lastName, secondLastName,
+            stateID, cityID, sectorID, suburbID, relativesTypeID, phoneNumber,
+            employeeID, createdDate, createdBy
             )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -412,14 +378,8 @@ exports.createEmployee = async (req, res) => {
     if (req.body.employeeData.relatives) {
       req.body.familyPAHList.forEach(async (x) => {
         await db.query(
-          `INSERT INTO auxrelative_emp (
-            relativesTypeID,
-            newEmployee,
-            employeeID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
+          `INSERT INTO auxrelative_emp (relativesTypeID, newEmployee, employeeID,
+            createdDate, createdBy
             )
         VALUES (?, ?, ?, ?)`,
           [x.relativesTypeID, employeeID, x.employeeID, camposAuditoriaADD]
@@ -429,19 +389,9 @@ exports.createEmployee = async (req, res) => {
 
     req.body.beneficiariesList.forEach(async (x) => {
       await db.query(
-        `INSERT INTO beneficiaries_emp (
-            firstName,
-            middleName,
-            lastName,
-            secondLastName,
-            percentage,
-            relativesTypeID,
-            phoneNumber,
-            employeeID,
-            createdDate,
-            createdBy,
-            updatedDate,
-            updatedBy
+        `INSERT INTO beneficiaries_emp (firstName, middleName, lastName,
+            secondLastName, percentage, relativesTypeID,
+            phoneNumber, employeeID, createdDate, createdBy
             )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -610,7 +560,7 @@ exports.disabledEmployee = async (req, res) => {
   try {
     const [result] = await db.query(
       `INSERT INTO h_dismissal_emp (dateDismissal, dismissalTypeID, employeeID, comment, 
-        createdDate, createdBy, updatedDate, updatedBy)
+        createdDate, createdBy)
        VALUES (?, ?, ?, ?, ?)`,
       [
         dayjs(req.body.dateDismissal)
@@ -686,7 +636,7 @@ exports.addChild = async (req, res) => {
     const [result] = await db.query(
       `INSERT INTO children_emp (
           firstName, middleName, lastName, secondLastName, birthDate, birthCert,
-          genderID, employeeID, createdDate, createdBy, updatedDate, updatedBy
+          genderID, employeeID, createdDate, createdBy
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         formatNamePart(firstName),
@@ -779,7 +729,7 @@ exports.addFamilyInfo = async (req, res) => {
     const [result] = await db.query(
       `INSERT INTO familyinformation_emp (
           relativesTypeID, firstName, middleName, lastName, secondLastName, age,
-          employeeID, createdDate, createdBy, updatedDate, updatedBy
+          employeeID, createdDate, createdBy
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         relativesTypeID,
@@ -884,7 +834,7 @@ exports.addEContact = async (req, res) => {
       `INSERT INTO econtacts_emp (
           firstName, middleName, lastName, secondLastName, stateID, cityID,
           sectorID, suburbID, relativesTypeID, phoneNumber,
-          employeeID, createdDate, createdBy, updatedDate, updatedBy
+          employeeID, createdDate, createdBy
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         formatNamePart(firstName),
@@ -985,10 +935,7 @@ exports.addAuxRelative = async (req, res) => {
 
   try {
     const [result] = await db.query(
-      `INSERT INTO auxrelative_emp (
-          relativesTypeID, newEmployee, employeeID,
-          createdDate, createdBy, updatedDate, updatedBy
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO auxrelative_emp (relativesTypeID, newEmployee, employeeID, createdDate, createdBy) VALUES (?, ?, ?, ?, ?)`,
       [
         relativesTypeID,
         parseInt(req.params.employeeID),
@@ -1083,7 +1030,7 @@ exports.addBeneficiaryInfo = async (req, res) => {
       `INSERT INTO beneficiaries_emp (
           firstName, middleName, lastName, secondLastName, percentage,
           relativesTypeID, phoneNumber, employeeID,
-          createdDate, createdBy, updatedDate, updatedBy
+          createdDate, createdBy
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         formatNamePart(firstName),
