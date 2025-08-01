@@ -1,4 +1,7 @@
 const db = require("../config/db");
+const { camposAuditoriaADD } = require("../helpers/columnasAuditoria");
+const bcrypt = require("bcrypt"); // Necesitas instalar: npm install bcrypt
+const { formatNamePart } = require("../helpers/formateador");
 
 exports.getUsuarios = (req, res) => {
   db.query("SELECT * FROM users_us", (err, results) => {
@@ -105,6 +108,8 @@ exports.createuser = async (req, res) => {
     permissions,
   } = req.body;
 
+  console.log("Datos recibidos:", req.body);
+
   if (
     !firstName ||
     !lastName ||
@@ -149,41 +154,42 @@ exports.createuser = async (req, res) => {
 
     // Insertar el nuevo usuario en la base de datos
     const [result] = await db.query(
-      "INSERT INTO users_us (firstName, lastName, username, email, passwordHash, userStatusID, passwordLastChanged) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [firstName, lastName, username, email, hashedPassword, 1, currentDateTime] // userStatusID 1 es 'Activo'
+      "INSERT INTO users_us (firstName, lastName, username, email, passwordHash, userStatusID, passwordLastChanged, createdDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        formatNamePart(firstName),
+        formatNamePart(lastName),
+        username,
+        email,
+        hashedPassword,
+        1,
+        currentDateTime,
+        currentDateTime,
+      ] // userStatusID 1 es 'Activo'
     );
 
     const newUserID = result.insertId;
 
     // Insertar la relación usuario-compañía en la tabla usercompany_us
     await db.query(
-      "INSERT INTO usercompany_us (userID, companyID) VALUES (?, ?)",
-      [newUserID, companyID]
+      "INSERT INTO usercompany_us (userID, companyID, createdDate) VALUES (?, ?, ?)",
+      [newUserID, companyID, currentDateTime]
     );
 
     // Insertar el perfil por defecto para el nuevo usuario
-    // Validar datos de entrada
-    if (!newUserID || !Array.isArray(permissions)) {
-      return res.status(400).json({ message: "Datos de entrada inválidos" });
-    }
-
-    // Eliminar los permisos existentes para el usuario
-    await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [
-      newUserID,
-    ]);
-
     if (permissions.length === 0) {
       return res.status(400).json({ message: "No se proporcionaron permisos" });
     }
 
     // Crear un nuevo perfil para el usuario con el arreglo de permisos
     for (const permission of permissions) {
+      console.log(newUserID, permission, camposAuditoriaADD(req));
+
       await db.query(
         `
-        INSERT INTO profilebyuser_us (userId, permissionScreenID)
-        VALUES (?, ?)
-      `,
-        [newUserID, permission]
+          INSERT INTO profilebyuser_us (userId, permissionScreenID, createdDate, createdBy)
+          VALUES (?, ?, ?)
+        `,
+        [newUserID, permission, camposAuditoriaADD(req)]
       );
     }
     res
@@ -196,29 +202,28 @@ exports.createuser = async (req, res) => {
 };
 
 exports.createProfileByUser = async (req, res) => {
-  const { userId, permissions } = req.body;
+  const { userID, permissions } = req.body;
 
   try {
-    // Validar datos de entrada
-    if (!userId || !Array.isArray(permissions)) {
+    if (!userID || !Array.isArray(permissions)) {
       return res.status(400).json({ message: "Datos de entrada inválidos" });
     }
 
     // Eliminar los permisos existentes para el usuario
-    await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [userId]);
+    await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [userID]);
 
     if (permissions.length === 0) {
       return res.status(400).json({ message: "No se proporcionaron permisos" });
     }
 
-    // Crear un nuevo perfil para el usuario con el arreglo de permisos
+    //Crear un nuevo perfil para el usuario con el arreglo de permisos
     for (const permission of permissions) {
       await db.query(
         `
         INSERT INTO profilebyuser_us (userId, permissionScreenID)
         VALUES (?, ?)
       `,
-        [userId, permission]
+        [userID, permission]
       );
     }
 
@@ -231,7 +236,7 @@ exports.createProfileByUser = async (req, res) => {
 
 //Modulos cuchao
 exports.getModules = async (req, res) => {
-try {
+  try {
     const [modules] = await db.query(
       `SELECT 
       moduleID, 
@@ -240,16 +245,15 @@ try {
     );
 
     res.json(modules);
-  }catch (error) {
+  } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener módulos" });
   }
-
-}
+};
 
 //Pantallas cuchao
 exports.getScreens = async (req, res) => {
-  const {moduleID} = req.params;
+  const { moduleID } = req.params;
   try {
     const [rows] = await db.query(
       `SELECT 
@@ -265,11 +269,7 @@ exports.getScreens = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Error al obtener pantallas" });
   }
-}
+};
 
 //Permisos para las pantallas cuchao
-exports.getPantallas = async (req, res) => {
-
-
-
-}
+exports.getPantallas = async (req, res) => {};

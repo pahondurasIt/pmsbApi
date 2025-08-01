@@ -5,9 +5,7 @@ const camposAuditoriaADD = (req) => {
   const userID = getUserIdFromToken(req);
   return [
     dayjs().format("YYYY-MM-DD"),
-    userID || 2, // ID del usuario que realiza la acción
-    null, // ID del usuario afectado, si aplica
-    null, // ID de la entidad afectada, si aplica
+    userID || 3, // ID del usuario que realiza la acción
   ];
 };
 
