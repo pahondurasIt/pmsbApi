@@ -13,4 +13,8 @@ router.post("/userProfile", userController.createProfileByUser);
 
 router.get('/modules', userController.getModules);
 router.get('/screens/:moduleID', userController.getScreens);
+router.get('/permissions-by-screen/:screenID', userController.getScreensByPermission);
+
+router.post('/create-permission', userController.createPermission);
+router.post('/create-screen', userController.createScreen);
 module.exports = router;
