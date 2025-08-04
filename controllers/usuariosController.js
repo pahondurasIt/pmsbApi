@@ -275,7 +275,7 @@ exports.getScreens = async (req, res) => {
 
 //Permisos para las pantallas cuchao
 exports.createPermission = async (req, res) => {
-try {
+  try {
     const { permissionName, moduleID, screenID } = req.body;
 
     if (!permissionName || !moduleID || !screenID) {
@@ -326,6 +326,28 @@ exports.createScreen = async (req, res) => {
   }
 };
 
+exports.createModule = async (req, res) => {
+  try {
+    const { moduleName } = req.body;
+    console.log("Datos recibidos para crear módulo:", req.body);
+    
+
+    if (!moduleName) {
+      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+    }
+    const query = `
+      INSERT INTO module_us ( moduleName, createdDate)
+      VALUES (?, NOW())
+    `;
+
+    await db.query(query, [moduleName]);
+
+    res.status(201).json({ message: 'Módulo creado exitosamente' });
+  } catch (error) {
+    console.error('Error al crear módulo:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+}
 
 // Obtener permisos por pantalla
 exports.getScreensByPermission = async (req, res) => {
@@ -345,4 +367,5 @@ exports.getScreensByPermission = async (req, res) => {
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 };
-exports.getPantallas = async (req, res) => {};
+// exports.getPantallas = async (req, res) => {};
+

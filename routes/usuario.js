@@ -17,4 +17,6 @@ router.get('/permissions-by-screen/:screenID', userController.getScreensByPermis
 
 router.post('/create-permission', userController.createPermission);
 router.post('/create-screen', userController.createScreen);
+router.post('/create-module', userController.createModule);
+
 module.exports = router;
