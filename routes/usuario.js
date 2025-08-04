@@ -5,6 +5,8 @@ const userController = require("../controllers/usuariosController");
 router.get("/", userController.getUsuarios);
 router.post("/createuser", userController.createuser); // Ruta para crear un usuario
 router.get("/user-list", userController.getAllUsers);
+router.get("/userData/:userID", userController.getUserById);
+router.put("/updateuser/:userID", userController.updateUserById);
 
 // Obtener permisos de los usuarios
 router.get("/permissions", userController.getPermissions);

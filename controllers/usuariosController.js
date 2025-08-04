@@ -182,8 +182,6 @@ exports.createuser = async (req, res) => {
 
     // Crear un nuevo perfil para el usuario con el arreglo de permisos
     for (const permission of permissions) {
-      console.log(newUserID, permission, camposAuditoriaADD(req));
-
       await db.query(
         `
           INSERT INTO profilebyuser_us (userId, permissionScreenID, createdDate, createdBy)
@@ -197,6 +195,108 @@ exports.createuser = async (req, res) => {
       .json({ message: "Usuario creado exitosamente", userId: newUserID });
   } catch (error) {
     console.error("Error al crear usuario:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+};
+
+exports.getUserById = async (req, res) => {
+  const userID = req.params.userID;
+
+  try {
+    const [user] = await db.query(
+      `select 
+        u.userID, u.username, u.email, u.firstName, u.lastName,
+        c.companyID, c.companyName
+        from users_us u
+        inner join usercompany_us uc on uc.userID = u.userID
+        inner join companies_us c on c.companyID = uc.companyID
+        where u.userID = ?`,
+      [userID]
+    );
+
+    if (user.length === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    const [permissions] = await db.query(
+      `
+        SELECT 
+          ps.permissionScreenID, ps.permissionName,
+        CASE 
+            WHEN pu.profilebyuserID IS NOT NULL THEN TRUE
+            ELSE FALSE
+        END AS checked
+        FROM permissionscreen_us ps
+          INNER JOIN screen_us s ON s.screenID = ps.screenID
+          INNER JOIN module_us m ON m.moduleID = s.moduleID
+          LEFT JOIN profilebyuser_us pu 
+            ON pu.permissionScreenID = ps.permissionScreenID 
+            AND pu.userId = ?
+        ORDER BY m.moduleName, s.screenName, ps.permissionName;
+    `,
+      [userID]
+    );
+
+    res.json({
+      user: user[0],
+      permissions: permissions,
+    });
+  } catch (error) {
+    console.error("Error al obtener usuario:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+};
+
+exports.updateUserById = async (req, res) => {
+  const userID = req.params.userID;
+  const { firstName, lastName, email, companyID, permissions } = req.body;
+
+  try {
+    // Verificar si el usuario existe
+    const [user] = await db.query(
+      `SELECT userID FROM users_us WHERE userID = ?`,
+      [userID]
+    );
+
+    if (user.length === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    // Actualizar el usuario
+    await db.query(
+      `UPDATE users_us SET firstName = ?, lastName = ?, email = ?, updatedDate = ? WHERE userID = ?`,
+      [firstName, lastName, email, new Date(), userID]
+    );
+
+    // Actualizar la compañía del usuario
+    if (companyID) {
+      await db.query(
+        `UPDATE usercompany_us SET companyID = ? WHERE userID = ?`,
+        [companyID, userID]
+      );
+    }
+
+    // Actualizar los permisos del usuario
+    await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [userID]);
+
+    if (permissions.length === 0) {
+      return res.status(400).json({ message: "No se proporcionaron permisos" });
+    }
+
+    // Crear un nuevo perfil para el usuario con el arreglo de permisos
+    for (const permission of permissions) {
+      await db.query(
+        `
+          INSERT INTO profilebyuser_us (userId, permissionScreenID, createdDate, createdBy)
+          VALUES (?, ?, ?)
+        `,
+        [userID, permission, camposAuditoriaADD(req)]
+      );
+    }
+
+    res.status(200).json({ message: "Usuario actualizado exitosamente" });
+  } catch (error) {
+    console.error("Error al actualizar usuario:", error);
     res.status(500).json({ message: "Error interno del servidor." });
   }
 };
