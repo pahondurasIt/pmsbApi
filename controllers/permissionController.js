@@ -75,7 +75,7 @@ exports.getAllPermissions = async (req, res) => {
         ' ', e.lastName,  ' ', e.secondLastName) as fullName,
         e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
-        pa.exitPermission, pa.entryPermission, pa.IsApproved, pa.isPaid
+        pa.exitPermission, pa.entryPermission, pa.IsApproved, pa.isPaid, pa.status
     FROM
     permissionattendance_emp pa
             INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
@@ -165,7 +165,7 @@ exports.authorizePermission = async (req, res) => {
       });
     }
 
-    // Query actualizado para incluir los nuevos campos de hora
+    // Query actualizado para incluir los nuevos campos de hora y el campo usage
     const query = `
       INSERT INTO permissionattendance_emp (
         employeeID, 
@@ -176,21 +176,23 @@ exports.authorizePermission = async (req, res) => {
         comment, 
         isPaid, 
         isApproved, 
+        status,  
         createdDate, 
         createdBy, 
         updatedDate, 
         updatedBy
       ) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NULL, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NULL, ?)
     `;
 
     const commentValue = null;
     const isPaidValue = 0;
     const isApprovedValue = 1;
+    const statusValue = 1; // <-- Añadir esta línea
     const createdByValue = 1;
     const updatedByValue = 1;
 
-    // Array de valores actualizado para incluir los nuevos campos de hora
+    // Array de valores actualizado para incluir los nuevos campos de hora y usage
     const values = [
       employeeID,
       permissionType,
@@ -200,6 +202,7 @@ exports.authorizePermission = async (req, res) => {
       commentValue,
       isPaidValue,
       isApprovedValue,
+      statusValue, // <-- Añadir esta línea
       createdByValue,
       updatedByValue,
     ];

@@ -465,5 +465,54 @@ exports.getScreensByPermission = async (req, res) => {
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 };
+
+exports.getActiveUsers = async (req, res) => {
+  try {
+    const [users] = await db.query(`
+      SELECT 
+        u.userID,
+        emp.firstName,
+        emp.lastName,
+        u.username,
+        u.email
+      FROM users_us u
+      INNER JOIN userstatus_us s ON u.userStatusID = s.userStatusID
+      INNER JOIN employees_emp emp ON u.employeeID = emp.employeeID
+      WHERE s.statusName = 'Activo'
+    `);
+
+    // Ocultar userID en la respuesta si no quieres que se muestre en el frontend
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error al obtener usuarios activos:", error);
+    res.status(500).json({ message: "Error interno del servidor." });
+  }
+};
+
+
+exports.adminChangePassword = async (req, res) => {
+  const { userID, newPassword } = req.body;
+
+  if (!userID || !newPassword) {
+    return res.status(400).json({ message: "Faltan datos requeridos" });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await db.query(
+      `UPDATE users_us SET passwordHash = ?, passwordLastChanged = NOW(), updatedDate = NOW() WHERE userID = ?`,
+      [hashedPassword, userID]
+    );
+
+    res.status(200).json({ message: "Contraseña actualizada correctamente" });
+  } catch (error) {
+    console.error("Error al cambiar contraseña:", error);
+    res.status(500).json({ message: "Error al actualizar la contraseña" });
+  }
+};
+
+
+
 // exports.getPantallas = async (req, res) => {};
 
