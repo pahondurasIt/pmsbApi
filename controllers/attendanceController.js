@@ -131,7 +131,7 @@ async function checkPendingPermissionReturn(employeeID) {
 async function updatePermissionRecordWithExit(permissionID, currentTime) {
   try {
     const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET exitPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p') WHERE permissionID = ?",
+      "UPDATE permissionattendance_emp SET exitPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p'), status = 0 WHERE permissionID = ?",
       [currentTime, permissionID]
     );
     return { success: result.affectedRows > 0 };
@@ -144,7 +144,7 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
 async function updatePermissionRecordWithEntry(permissionID, currentTime) {
   try {
     const [result] = await db.query(
-      "UPDATE permissionattendance_emp SET entryPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p'), isApproved = 0 WHERE permissionID = ?",
+      "UPDATE permissionattendance_emp SET entryPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p'), isApproved = 0, status = 0 WHERE permissionID = ?",
       [currentTime, permissionID]
     );
     return { success: result.affectedRows > 0 };
@@ -626,7 +626,7 @@ exports.registerAttendance = async (req, res) => {
             "No se pudo actualizar el registro de permiso para regreso: " +
             (updateResult.error || "Error desconocido")
           );
-        }
+        } 
         // Emitir el registro completo
         const fullRecord = await getSingleAttendanceRecord(
           employeeID,

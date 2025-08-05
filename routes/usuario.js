@@ -21,4 +21,7 @@ router.post('/create-permission', userController.createPermission);
 router.post('/create-screen', userController.createScreen);
 router.post('/create-module', userController.createModule);
 
+router.get('/active_user', userController.getActiveUsers)
+router.post('/change_password',userController.adminChangePassword)
+
 module.exports = router;
