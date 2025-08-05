@@ -45,7 +45,7 @@ exports.getEmployees = async (req, res) => {
     const [employees] = await db.query(
       `
       SELECT
-          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) fullName,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive,
           e.evaluationStep, e.hireDate
         FROM employees_emp e
@@ -76,7 +76,7 @@ exports.getEmployeeByID = async (req, res) => {
 
     const [employee] = await db.query(
       `select
-        e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) nombreCompleto,
+        e.employeeID, e.codeEmployee, concat(e.firstName,' ',e.middleName,' ',e.lastName ,' ', e.secondLastName) fullName,
         e.firstName,e.middleName,e.lastName ,e.secondLastName, e.phoneNumber, e.birthDate, e.photoUrl, e.genderID, g.genderName, 
         e.docID, d.docTypeName, e.docNumber, e.bloodTypeID, b.bloodTypeName, e.hireDate, e.endDate, e.isActive, e.partnerName, 
         dismissal.dateDismissal, dismissal.dismissalTypeID, disType.dismissalDesc, dismissal.comment,
@@ -121,7 +121,7 @@ exports.getEmployeeByID = async (req, res) => {
     const [children] = await db.query(`
         select
             f.childrenID, f.firstName, f.middleName, f.lastName, f.secondLastName,
-            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) fullName,
             f.birthDate, f.birthCert, g.genderName, g.genderID
         from children_emp f
         INNER JOIN gender_emp g on g.genderID = f.genderID
@@ -131,7 +131,7 @@ exports.getEmployeeByID = async (req, res) => {
     const [familyInformation] = await db.query(`
           select
           	f.familyInfoID, f.firstName, f.middleName, f.lastName, f.secondLastName,
-            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) nombreCompleto,
+            concat(f.firstName, ' ', f.middleName, ' ', f.lastName, ' ', f.secondLastName) fullName,
             f.age, r.relativesTypeDesc, r.relativesTypeID
           from familyinformation_emp f
           INNER JOIN relativestype_emp r on r.relativesTypeID = f.relativesTypeID
@@ -141,7 +141,7 @@ exports.getEmployeeByID = async (req, res) => {
     const [econtact] = await db.query(`
       select
           e.econtactID, e.firstName, e.middleName, e.lastName, e.secondLastName,
-          concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) nombreCompleto,
+          concat(e.firstName, ' ', e.middleName, ' ', e.lastName, ' ', e.secondLastName) fullName,
           e.phoneNumber, r.relativesTypeDesc, r.relativesTypeID,
           concat(st.stateName, ', ', c.cityName, ', ', se.sectorName, ', ', su.suburbName) direccion,
           st.stateID, st.stateName, c.cityID, c.cityName, se.sectorID, se.sectorName, su.suburbID, su.suburbName
@@ -253,9 +253,9 @@ exports.createEmployee = async (req, res) => {
           birthDate, bloodTypeID, cityID, stateID, sectorID, suburbID, address, gabachSize, shirtSize, divisionID,
           departmentID, areaID, jobID, hireDate, endDate, isActive, partnerName, partnerage, companyID,
           employeeTypeID, contractTypeID, payrollTypeID, shiftID, educationLevelID, educationGrade, transportTypeID, 
-          maritalStatusID, nationality, evaluationStep, incapacitated, salary, relatives, createdDate, createdBy
+          maritalStatusID, nationality, evaluationStep, incapacitated, exceptionID, salary, relatives, createdDate, createdBy
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?)`,
       [
         correlative[0].lastUsed + 1,
         formatNamePart(req.body.employeeData.firstName),
@@ -299,11 +299,15 @@ exports.createEmployee = async (req, res) => {
         req.body.employeeData.nationality,
         req.body.employeeData.evaluationStep,
         req.body.employeeData.incapacitated,
+        3,
         req.body.employeeData.salary,
         req.body.employeeData.relatives,
         camposAuditoriaADD(req), // Fecha y usuario de creación
       ]
     );
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ message: "Error al crear el empleado" });
+    }
     await db.query(
       `UPDATE correlative SET lastUsed = ${
         correlative[0].lastUsed + 1
@@ -410,7 +414,7 @@ exports.createEmployee = async (req, res) => {
 
     const [employee] = await db.query(
       `SELECT
-          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) fullName,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
               INNER JOIN division_emp di on di.divisionID = e.divisionID
@@ -422,7 +426,10 @@ exports.createEmployee = async (req, res) => {
         ORDER BY e.employeeID asc;`
     );
 
-    res.status(201).json(...employee);
+    res.status(201).json({
+      newEmployee: employee,
+      message: "Empleado creado correctamente",
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el usuario" });
@@ -442,7 +449,7 @@ exports.getSupervisorSewing = async (req, res) => {
       `
     );
 
-    res.json(supervisores);
+    res.status(200).json(supervisores);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener datos de empleados" });
@@ -462,7 +469,7 @@ exports.getEmployeesSewing = async (req, res) => {
       `
     );
 
-    res.json(employees);
+    res.status(200).json(employees);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al obtener datos de empleados" });
@@ -536,7 +543,7 @@ exports.updateEmployee = async (req, res) => {
 
     const [employee] = await db.query(
       `SELECT
-          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) nombreCompleto,
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) fullName,
           dep.departmentName, j.jobName, e.incapacitated, shi.shiftName, e.isActive, e.docNumber, if (e.isActive, 'ACTIVO', 'INACTIVO') isActive
         FROM employees_emp e
               INNER JOIN division_emp di on di.divisionID = e.divisionID
@@ -588,7 +595,7 @@ exports.disabledEmployee = async (req, res) => {
       ]
     );
 
-    res.json({ message: "Empleado deshabilitado" });
+    res.status(200).json({ message: "Empleado deshabilitado" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al deshabilitar el empleado" });
@@ -610,7 +617,7 @@ exports.uploadPhoto = (req, res) => {
         "UPDATE employees_emp SET photoUrl = ? WHERE employeeID = ?",
         [photoPath, employeeID]
       );
-      res.json({ message: "Foto subida correctamente" });
+      res.status(200).json({ message: "Foto subida correctamente" });
     } catch (error) {
       console.error(error);
       res
@@ -650,7 +657,7 @@ exports.addChild = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.json({ childrenID: result.insertId });
+    res.status(201).json({ childrenID: result.insertId, message: "Hijo creado correctamente" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el hijo" });
@@ -695,7 +702,7 @@ exports.updateChild = async (req, res) => {
         req.params.childrenID,
       ]
     );
-    res.json({ message: "Hijo actualizado correctamente" });
+    res.status(200).json({ message: "Hijo actualizado correctamente" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al actualizar el hijo" });
@@ -742,7 +749,7 @@ exports.addFamilyInfo = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.json({ familyInfoID: result.insertId });
+    res.status(201).json({ familyInfoID: result.insertId, message: "Información familiar creada correctamente" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear la información familiar" });
@@ -786,7 +793,7 @@ exports.updateFamilyInfo = async (req, res) => {
         req.params.familyInfoID,
       ]
     );
-    res.json({ message: "Información familiar actualizada correctamente" });
+    res.status(200).json({ message: "Información familiar actualizada correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -851,7 +858,7 @@ exports.addEContact = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.json({ econtactID: result.insertId });
+    res.status(201).json({ econtactID: result.insertId, message: "Contacto de emergencia creado correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -901,7 +908,7 @@ exports.updateEContact = async (req, res) => {
         req.params.econtactID,
       ]
     );
-    res.json({ message: "Contacto de emergencia actualizado correctamente" });
+    res.status(200).json({ message: "Contacto de emergencia actualizado correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -920,7 +927,7 @@ exports.deleteEContact = async (req, res) => {
     await db.query("DELETE FROM econtacts_emp WHERE econtactID = ?", [
       econtactID,
     ]);
-    res.json({ message: "Contacto de emergencia eliminado correctamente" });
+    res.status(200).json({ message: "Contacto de emergencia eliminado correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -943,7 +950,7 @@ exports.addAuxRelative = async (req, res) => {
         ...camposAuditoriaADD(req),
       ]
     );
-    res.json({ auxRelativeID: result.insertId });
+    res.status(201).json({ auxRelativeID: result.insertId, message: "Familiar auxiliar creado correctamente" });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el familiar auxiliar" });
@@ -1005,7 +1012,7 @@ exports.deleteAuxRelativeByEmployee = async (req, res) => {
     await db.query("DELETE FROM auxrelative_emp WHERE newEmployee = ?", [
       employeeID,
     ]);
-    res.json({ message: "Familiares auxiliares eliminados correctamente" });
+    res.status(200).json({ message: "Familiares auxiliares eliminados correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -1044,7 +1051,10 @@ exports.addBeneficiaryInfo = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.json({ beneficiaryID: result.insertId });
+    res.status(201).json({
+      beneficiaryID: result.insertId,
+      message: "Información del beneficiario creada correctamente",
+    });
   } catch (error) {
     console.error(error);
     res
@@ -1087,7 +1097,7 @@ exports.updateBeneficiaryInfo = async (req, res) => {
         req.params.beneficiaryID,
       ]
     );
-    res.json({
+    res.status(200).json({
       message: "Información del beneficiario actualizada correctamente",
     });
   } catch (error) {
@@ -1108,7 +1118,7 @@ exports.deleteBeneficiaryInfo = async (req, res) => {
     await db.query("DELETE FROM beneficiaries_emp WHERE beneficiaryID = ?", [
       beneficiaryID,
     ]);
-    res.json({
+    res.status(200).json({
       message: "Información del beneficiario eliminada correctamente",
     });
   } catch (error) {
