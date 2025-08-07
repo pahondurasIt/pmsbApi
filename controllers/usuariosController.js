@@ -512,6 +512,80 @@ exports.adminChangePassword = async (req, res) => {
   }
 };
 
+exports.getUsersMenuPermission = async (req, res) => {
+  const userID = req.params.userID;
+
+  if(!userID){
+    return res.status(400).json({ message: "Se requiere el ID de usuario" });
+  }
+
+  try{
+    const query = `
+    SELECT DISTINCT
+                m.moduleID,
+                m.moduleName,
+                s.screenID,
+                s.screenName,
+                s.path,
+                s.component
+            FROM
+                module_us m
+            INNER JOIN
+                screen_us s ON m.moduleID = s.moduleID
+            INNER JOIN
+                permissionscreen_us ps ON s.screenID = ps.screenID AND m.moduleID = ps.moduleID
+            INNER JOIN
+                profilebyuser_us pbu ON ps.permissionScreenID = pbu.permissionScreenID
+            WHERE
+                pbu.userID = ?
+                AND pbu.isActive = TRUE
+            ORDER BY
+                m.moduleName, s.screenName;
+    `
+    const [rows] = await db.query(query, [userID]);
+ 
+        res.status(200).json(rows);
+
+  }catch(error){
+    console.error('Error al obtener permisos:', error);
+     res.status(500).json({ message: 'Error interno del servidor al obtener permisos.' });
+  }
+}
+
+exports.getUsersPermissionScreen = async (req, res) => {
+ try {
+   
+    const { userID} = req.params;
+
+    if (!userID) {
+      return res.status(400).json({ message: 'Falta el ID del usuario.' });
+    }
+
+    const query = `
+      SELECT
+          ps.permissionName
+      FROM
+          users_us u
+      JOIN
+          profilebyuser_us pbu ON u.userID = pbu.userID
+      JOIN
+          permissionscreen_us ps ON pbu.permissionScreenID = ps.permissionScreenID
+      WHERE
+          u.userID = ? AND pbu.isActive = 1;
+    `;
+
+    const [results] = await db.query(query, [userID]);
+
+    const permissions = results.map(row => row.permissionName);
+
+    res.status(200).json({ permissions });
+
+  } catch (error) {
+   
+    console.error('Error al obtener permisos de usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor al procesar la solicitud.' });
+  }
+}
 
 
 // exports.getPantallas = async (req, res) => {};
