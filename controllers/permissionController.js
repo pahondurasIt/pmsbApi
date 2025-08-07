@@ -7,6 +7,8 @@ const {
   camposAuditoriaADD,
 } = require("../helpers/columnasAuditoria");
 const { isValidString } = require("../helpers/validator");
+const { printPermissionTicket } = require("./thermalPrinterController");
+const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 
 // Extender dayjs con plugins de UTC y Timezone
@@ -83,7 +85,9 @@ exports.getAllPermissions = async (req, res) => {
               INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
               INNER JOIN employees_emp e on e.employeeID = pa.employeeID
               INNER JOIN jobs_emp j on e.jobID = j.jobID
-      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs().add(1, "day").format("YYYY-MM-DD")}'
+      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
+      .add(1, "day")
+      .format("YYYY-MM-DD")}'
       ORDER BY pa.permissionID desc;
     `);
     res.json(permissionResults);
@@ -176,10 +180,10 @@ exports.createPermission = async (req, res) => {
     const query = `
       INSERT INTO permissionattendance_emp (
         employeeID, permissionTypeID, date, exitTimePermission, entryTimePermission,
-        exitPermission, entryPermission, comment, isPaid, isApproved, 
-        status, createdDate, createdBy 
-      ) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        exitPermission, entryPermission, comment, isPaid, isApproved, approvedBy,
+        status, createdDate, createdBy
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -188,11 +192,16 @@ exports.createPermission = async (req, res) => {
       dayjs(date).tz("America/Tegucigalpa").format("YYYY-MM-DD"),
       dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
       dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
-      isValidString(exitPermission) ? dayjs(exitPermission).tz("America/Tegucigalpa").format("HH:mm") : null,
-      isValidString(entryPermission) ? dayjs(entryPermission).tz("America/Tegucigalpa").format("HH:mm") : null,
+      isValidString(exitPermission)
+        ? dayjs(exitPermission).tz("America/Tegucigalpa").format("HH:mm")
+        : null,
+      isValidString(entryPermission)
+        ? dayjs(entryPermission).tz("America/Tegucigalpa").format("HH:mm")
+        : null,
       isValidString(comment) ? comment : null,
       isPaid || false,
       isApproved || false,
+      null,
       status,
       camposAuditoriaADD(req),
     ];
@@ -227,20 +236,36 @@ exports.approvedPermission = async (req, res) => {
   try {
     const { permissionID } = req.params;
     const { isApproved } = req.body;
+    const userID = getUserIdFromToken(req);
+
     const [results] = await db.query(
       `
       UPDATE permissionattendance_emp
-      SET isApproved = ?, updatedDate = ?, updatedBy = ?
+      SET isApproved = ?, approvedBy = ?, updatedDate = ?, updatedBy = ?
       WHERE permissionID = ?
     `,
-      [isApproved, ...camposAuditoriaUPDATE(req), permissionID]
+      [isApproved, userID, ...camposAuditoriaUPDATE(req), permissionID]
     );
     if (results.affectedRows === 0) {
       return res.status(500).json({
         message: "Permiso no encontrado o ya está aprobado.",
       });
     }
-    res.json({message: "Permiso aprobado correctamente", results});
+
+    // Si el permiso fue aprobado, imprimir el ticket automáticamente
+    if (isApproved) {
+      try {
+        await printPermissionTicket(permissionID, 'solicitud');
+        console.log(
+          `Ticket de permiso ${permissionID} enviado a impresión automáticamente.`
+        );
+      } catch (printError) {
+        console.error("Error al imprimir ticket automáticamente:", printError);
+        // No fallar la aprobación si hay error en la impresión
+      }
+    }
+
+    res.json({ message: "Permiso aprobado correctamente", results });
   } catch (err) {
     console.error("Error approving permission:", err);
     res.status(500).json({
@@ -248,9 +273,7 @@ exports.approvedPermission = async (req, res) => {
       error: err.message,
     });
   }
-}
-
-// Controlador para eliminar un permiso
+}; // Controlador para eliminar un permiso
 exports.deletePermission = async (req, res) => {
   try {
     const { permissionID } = req.params;

@@ -6,6 +6,7 @@ const timezone = require("dayjs/plugin/timezone"); // Plugin para manejar zonas 
 const isoWeek = require("dayjs/plugin/isoWeek"); // Plugin para manejar semanas ISO
 const { io } = require("../app"); // Importar la instancia de Socket.IO
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
+const { printPermissionTicket } = require("./thermalPrinterController");
 
 // Extender dayjs con los plugins de UTC, Timezone e ISO Week
 dayjs.extend(utc);
@@ -134,6 +135,23 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
       "UPDATE permissionattendance_emp SET exitPermission = STR_TO_DATE(?, '%Y-%m-%d %h:%i:%s %p'), status = 0 WHERE permissionID = ?",
       [currentTime, permissionID]
     );
+
+    if (result.affectedRows === 0) {
+      throw new Error("No se pudo actualizar el registro de permiso.");
+    }
+
+    if (result.affectedRows > 0) {
+      try {
+        await printPermissionTicket(permissionID, "salida");
+        console.log(
+          `Ticket de permiso ${permissionID} enviado a impresión automáticamente.`
+        );
+      } catch (printError) {
+        console.error("Error al imprimir ticket automáticamente:", printError);
+        // No fallar la aprobación si hay error en la impresión
+      }
+    }
+
     return { success: result.affectedRows > 0 };
   } catch (error) {
     console.error("Error al registrar salida con permiso:", error);
@@ -392,7 +410,7 @@ async function registerDispatchingInternal(
       scheduledExitTimeSQL,
       attendanceIDToUpdate,
     ]);
-    
+
     if (resultAttendanceUpdate.affectedRows === 0) {
       console.error(
         `Error: No se pudo actualizar exitTime para hattendanceID ${attendanceIDToUpdate} después de registrar despacho.`
@@ -423,11 +441,9 @@ async function registerDispatchingInternal(
     });
   } catch (error) {
     console.error("Error al registrar despacho:", error);
-    return res
-      .status(500)
-      .json({
-        message: "Error interno al registrar despacho: " + error.message,
-      });
+    return res.status(500).json({
+      message: "Error interno al registrar despacho: " + error.message,
+    });
   }
 }
 
@@ -454,18 +470,17 @@ exports.registerAttendance = async (req, res) => {
       [employeeID]
     );
     if (employeeRecords.length === 0) {
-      return res
-        .status(500)
-        .json({
-          message: "Empleado no encontrado. Verifica el ID.",
-          statusType: "error",
-        });
+      return res.status(500).json({
+        message: "Empleado no encontrado. Verifica el ID.",
+        statusType: "error",
+      });
     }
     const employee = employeeRecords[0];
 
     if (employee.isActive === 0) {
-      const employeeNameInactive = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
-        } ${employee.lastName}`;
+      const employeeNameInactive = `${employee.firstName}${
+        employee.middleName ? " " + employee.middleName : ""
+      } ${employee.lastName}`;
       const photoUrlInactive = employee.photoUrl || "";
       return res.status(400).json({
         message: "El empleado está inactivo. No puede registrar marcaje.",
@@ -475,8 +490,9 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
-    const employeeName = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
-      } ${employee.lastName}`;
+    const employeeName = `${employee.firstName}${
+      employee.middleName ? " " + employee.middleName : ""
+    } ${employee.lastName}`;
     const photoUrl = employee.photoUrl || "";
     const shiftID = employee.shiftID;
 
@@ -486,20 +502,20 @@ exports.registerAttendance = async (req, res) => {
       [shiftID]
     );
     if (shiftRecords.length === 0) {
-      return res
-        .status(400)
-        .json({
-          message: "No se encontró información del turno para este empleado.",
-          employeeName,
-          photoUrl,
-        });
+      return res.status(400).json({
+        message: "No se encontró información del turno para este empleado.",
+        employeeName,
+        photoUrl,
+      });
     }
     const shift = shiftRecords[0];
     const shiftStartTimeStr = shift.startTime;
     const shiftEndTimeStr = shift.endTime;
 
     // Determine if it's a night shift
-    const isNightShift = dayjs(shiftEndTimeStr, "HH:mm:ss").isBefore(dayjs(shiftStartTimeStr, "HH:mm:ss"));
+    const isNightShift = dayjs(shiftEndTimeStr, "HH:mm:ss").isBefore(
+      dayjs(shiftStartTimeStr, "HH:mm:ss")
+    );
 
     // Verificar registros no cerrados de días anteriores (para turnos nocturnos)
     // Este bloque maneja la salida de un turno nocturno que comenzó en un día anterior.
@@ -611,8 +627,8 @@ exports.registerAttendance = async (req, res) => {
             message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime
               .subtract(1, "hour")
               .format("h:mm A")} - ${shiftEndTime
-                .add(1, "hour")
-                .format("h:mm A")}).`,
+              .add(1, "hour")
+              .format("h:mm A")}).`,
             employeeName,
             photoUrl,
           });
@@ -624,9 +640,9 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para regreso: " +
-            (updateResult.error || "Error desconocido")
+              (updateResult.error || "Error desconocido")
           );
-        } 
+        }
         // Emitir el registro completo
         const fullRecord = await getSingleAttendanceRecord(
           employeeID,
@@ -716,7 +732,7 @@ exports.registerAttendance = async (req, res) => {
     } else {
       // Si no se encuentran detalles de turno o excepciones específicas para el día actual,
       // se utiliza la hora de fin de turno de detailsshift_emp, posiblemente ajustada para turno nocturno.
-      shiftEndTimeReal = shiftEndTime; 
+      shiftEndTimeReal = shiftEndTime;
     }
 
     const [existingRecords] = await db.query(
@@ -785,7 +801,7 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para salida: " +
-            (updateResult.error || "Error desconocido")
+              (updateResult.error || "Error desconocido")
           );
         }
         registrationType = "permission_exit";
@@ -796,9 +812,13 @@ exports.registerAttendance = async (req, res) => {
         // Si el registro actual está abierto (tiene entrada pero no salida),
         // y la hora actual es después de la hora de fin de turno real calculada,
         // o si es un turno nocturno y hay un registro abierto para hoy, permitir la salida.
-        const isCurrentRecordOpen = latestRecord.entryTime !== null && latestRecord.exitTime === null;
+        const isCurrentRecordOpen =
+          latestRecord.entryTime !== null && latestRecord.exitTime === null;
 
-        if (isCurrentRecordOpen && (currentDateTimeCST.isAfter(shiftEndTimeReal) || isNightShift)) {
+        if (
+          isCurrentRecordOpen &&
+          (currentDateTimeCST.isAfter(shiftEndTimeReal) || isNightShift)
+        ) {
           const query = `UPDATE h_attendance_emp SET exitTime = STR_TO_DATE(?, '%h:%i:%s %p'), updatedBy = ? WHERE hattendanceID = ?`;
           const [result] = await db.query(query, [
             currentTimeFormatted,
@@ -816,7 +836,9 @@ exports.registerAttendance = async (req, res) => {
         } else if (isCurrentRecordOpen) {
           // Si hay un registro abierto pero aún no es hora de una salida regular
           return res.status(400).json({
-            message: `No se puede registrar salida antes de las ${shiftEndTimeReal.format("h:mm A")}.`,
+            message: `No se puede registrar salida antes de las ${shiftEndTimeReal.format(
+              "h:mm A"
+            )}.`,
             employeeName,
             photoUrl,
           });
@@ -870,12 +892,13 @@ exports.registerAttendance = async (req, res) => {
     const employeeInfoForError =
       employeeRecords && employeeRecords.length > 0
         ? {
-          employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName
-            ? " " + employeeRecords[0].middleName
-            : ""
+            employeeName: `${employeeRecords[0].firstName}${
+              employeeRecords[0].middleName
+                ? " " + employeeRecords[0].middleName
+                : ""
             } ${employeeRecords[0].lastName}`,
-          photoUrl: employeeRecords[0].photoUrl || "",
-        }
+            photoUrl: employeeRecords[0].photoUrl || "",
+          }
         : {};
     res.status(500).json({
       message: "Error interno del servidor al registrar la asistencia.",
@@ -899,34 +922,27 @@ exports.updateTimeAttendance = async (req, res) => {
   // Validar que el campo a actualizar sea permitido.
   const allowedFields = ["entryTime", "exitTime"];
   if (!allowedFields.includes(field)) {
-    return res
-      .status(400)
-      .json({
-        message: "El campo especificado no es válido para la actualización.",
-      });
+    return res.status(400).json({
+      message: "El campo especificado no es válido para la actualización.",
+    });
   }
 
   // Validar el formato de la hora (hh:mm:ss AM/PM)
   const timeRegex =
     /^([0-1]?[0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])\s?(AM|PM|am|pm)$/i;
   if (!timeRegex.test(newTime)) {
-    return res
-      .status(400)
-      .json({
-        message:
-          "El formato de hora debe ser hh:mm:ss AM/PM (ej. 02:02:00 PM).",
-      });
+    return res.status(400).json({
+      message: "El formato de hora debe ser hh:mm:ss AM/PM (ej. 02:02:00 PM).",
+    });
   }
 
   try {
     // Obtener el ID de usuario del token para el registro de auditoría
     const userID = getUserIdFromToken(req);
     if (!userID) {
-      return res
-        .status(401)
-        .json({
-          message: "Token de autenticación inválido o no proporcionado.",
-        });
+      return res.status(401).json({
+        message: "Token de autenticación inválido o no proporcionado.",
+      });
     }
 
     // Obtener employeeID, fecha y el valor actual del campo antes de actualizar
@@ -936,11 +952,9 @@ exports.updateTimeAttendance = async (req, res) => {
     );
 
     if (attendanceRecord.length === 0) {
-      return res
-        .status(404)
-        .json({
-          message: "No se encontró el registro de asistencia para actualizar.",
-        });
+      return res.status(404).json({
+        message: "No se encontró el registro de asistencia para actualizar.",
+      });
     }
 
     const { employeeID, date, currentTime } = attendanceRecord[0];
@@ -983,11 +997,9 @@ exports.updateTimeAttendance = async (req, res) => {
     });
   } catch (error) {
     console.error(`Error al actualizar el campo de tiempo: ${error}`);
-    return res
-      .status(500)
-      .json({
-        message:
-          "Error interno del servidor al actualizar la hora: " + error.message,
-      });
+    return res.status(500).json({
+      message:
+        "Error interno del servidor al actualizar la hora: " + error.message,
+    });
   }
 };
