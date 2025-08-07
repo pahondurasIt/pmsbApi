@@ -2,7 +2,11 @@ const db = require("../config/db");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
-const { camposAuditoriaUPDATE } = require("../helpers/columnasAuditoria");
+const {
+  camposAuditoriaUPDATE,
+  camposAuditoriaADD,
+} = require("../helpers/columnasAuditoria");
+const { isValidString } = require("../helpers/validator");
 require("dayjs/locale/es");
 
 // Extender dayjs con plugins de UTC y Timezone
@@ -14,48 +18,46 @@ exports.getPermissionData = async (req, res) => {
     const [permissionResults] = await db.query(
       "SELECT permissionTypeID, permissionTypeName FROM permissiontype_emp"
     );
-    const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
-    const [employeeResults] = await db.query(
-      `SELECT DISTINCT
-        e.employeeID,
-        CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS fullName
-      FROM
-          employees_emp e
-          INNER JOIN h_attendance_emp a ON e.employeeID = a.employeeID
-      WHERE
-          a.date = ?
-          AND NOT EXISTS (
-              SELECT 1
-              FROM dispatching_emp d
-        WHERE d.employeeID = e.employeeID
-          AND d.date = ?
-    );`,
-      [currentDate, currentDate]
-    );
+    //const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
+    // const [employeeResults] = await db.query(
+    //   `SELECT DISTINCT
+    //     e.employeeID,
+    //     CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS fullName
+    //   FROM
+    //       employees_emp e
+    //       INNER JOIN h_attendance_emp a ON e.employeeID = a.employeeID
+    //   WHERE
+    //       a.date = ?
+    //       AND NOT EXISTS (
+    //           SELECT 1
+    //           FROM dispatching_emp d
+    //     WHERE d.employeeID = e.employeeID
+    //       AND d.date = ?
+    // );`,
+    //   [currentDate, currentDate]
+    // );
 
-    let currentTime = dayjs().format("HH:mm:ss");
+    // let currentTime = dayjs().format("HH:mm:ss");
 
-    const [shiftDetail] = await db.query(
-      `
-        SELECT 
-          s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
-        FROM detailsshift_emp ds
-        INNER JOIN shifts_emp s ON ds.shiftID = s.shiftID
-        WHERE s.companyID = 1
-          AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
-          AND (
-          (ds.startTime < ds.endTime AND '${currentTime}' BETWEEN ds.startTime AND ds.endTime)
-          OR
-          (ds.startTime > ds.endTime AND 
-          ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
-        )
-      `
-    );
+    // const [shiftDetail] = await db.query(
+    //   `
+    //     SELECT
+    //       s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
+    //     FROM detailsshift_emp ds
+    //     INNER JOIN shifts_emp s ON ds.shiftID = s.shiftID
+    //     WHERE s.companyID = 1
+    //       AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
+    //       AND (
+    //       (ds.startTime < ds.endTime AND '${currentTime}' BETWEEN ds.startTime AND ds.endTime)
+    //       OR
+    //       (ds.startTime > ds.endTime AND
+    //       ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
+    //     )
+    //   `
+    // );
 
     res.json({
       permissions: permissionResults,
-      employees: employeeResults,
-      shiftDetail,
     });
   } catch (err) {
     console.error("Error fetching permission data:", err);
@@ -69,22 +71,22 @@ exports.getPermissionData = async (req, res) => {
 // Función para obtener todos los permisos registrados
 exports.getAllPermissions = async (req, res) => {
   try {
-    const [results] = await db.query(`
+    const [permissionResults] = await db.query(`
      SELECT 
-        CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), 
-        ' ', e.lastName,  ' ', e.secondLastName) as fullName,
+        CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
+        ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment,
         e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
-        pa.exitPermission, pa.entryPermission, pa.IsApproved, pa.isPaid, pa.status
-    FROM
-    permissionattendance_emp pa
-            INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
-            INNER JOIN employees_emp e on e.employeeID = pa.employeeID
-            INNER JOIN jobs_emp j on e.jobID = j.jobID
-    where pa.date = DATE(NOW())
-    ORDER BY pa.permissionID desc;
+        pa.exitPermission, pa.entryPermission, pa.isApproved, pa.isPaid, pa.status
+      FROM
+      permissionattendance_emp pa
+              INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
+              INNER JOIN employees_emp e on e.employeeID = pa.employeeID
+              INNER JOIN jobs_emp j on e.jobID = j.jobID
+      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs().add(1, "day").format("YYYY-MM-DD")}'
+      ORDER BY pa.permissionID desc;
     `);
-    res.json(results);
+    res.json(permissionResults);
   } catch (err) {
     console.error("Error fetching all permissions:", err);
     res.status(500).json({
@@ -122,16 +124,21 @@ exports.markPermissionAsPaid = async (req, res) => {
   }
 };
 
-// Controlador para autorizar y registrar un permiso
-// ACTUALIZADO: Ahora recibe y guarda los campos de hora exitTimePermission y entryTimePermission
-exports.authorizePermission = async (req, res) => {
+// Controlador para crear y registrar un permiso
+exports.createPermission = async (req, res) => {
   try {
-    // Extraemos también los nuevos campos de hora del cuerpo de la solicitud
     const {
       employeeID,
       permissionType,
+      date,
+      comment,
       exitTimePermission,
       entryTimePermission,
+      exitPermission,
+      entryPermission,
+      isPaid,
+      isApproved,
+      status,
     } = req.body;
 
     // Validación actualizada para incluir los nuevos campos obligatorios
@@ -151,8 +158,8 @@ exports.authorizePermission = async (req, res) => {
     const [permissionResults] = await db.query(
       `
         SELECT * FROM permissionattendance_emp pa
-          where pa.date = DATE(NOW()) and IsApproved
-          and pa.employeeID = ? and isnull(pa.exitPermission)
+        where pa.date = DATE(NOW()) and status
+        and pa.employeeID = ?;
         `,
       [employeeID]
     );
@@ -168,43 +175,26 @@ exports.authorizePermission = async (req, res) => {
     // Query actualizado para incluir los nuevos campos de hora y el campo usage
     const query = `
       INSERT INTO permissionattendance_emp (
-        employeeID, 
-        permissionTypeID, 
-        date, 
-        exitTimePermission,
-        entryTimePermission,
-        comment, 
-        isPaid, 
-        isApproved, 
-        status,  
-        createdDate, 
-        createdBy, 
-        updatedDate, 
-        updatedBy
+        employeeID, permissionTypeID, date, exitTimePermission, entryTimePermission,
+        exitPermission, entryPermission, comment, isPaid, isApproved, 
+        status, createdDate, createdBy 
       ) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, NULL, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
-    const commentValue = null;
-    const isPaidValue = 0;
-    const isApprovedValue = 1;
-    const statusValue = 1; // <-- Añadir esta línea
-    const createdByValue = 1;
-    const updatedByValue = 1;
-
-    // Array de valores actualizado para incluir los nuevos campos de hora y usage
     const values = [
       employeeID,
       permissionType,
-      dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD"), // Fecha actual en formato YYYY-MM-DD
-      dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm"), // NUEVO: Hora de salida
-      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"), // NUEVO: Hora de entrada de regreso
-      commentValue,
-      isPaidValue,
-      isApprovedValue,
-      statusValue, // <-- Añadir esta línea
-      createdByValue,
-      updatedByValue,
+      dayjs(date).tz("America/Tegucigalpa").format("YYYY-MM-DD"),
+      dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
+      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
+      isValidString(exitPermission) ? dayjs(exitPermission).tz("America/Tegucigalpa").format("HH:mm") : null,
+      isValidString(entryPermission) ? dayjs(entryPermission).tz("America/Tegucigalpa").format("HH:mm") : null,
+      isValidString(comment) ? comment : null,
+      isPaid || false,
+      isApproved || false,
+      status,
+      camposAuditoriaADD(req),
     ];
 
     const [result] = await db.query(query, values);
@@ -228,6 +218,60 @@ exports.authorizePermission = async (req, res) => {
       message:
         "Ocurrió un error en el servidor al intentar autorizar el permiso.",
       error: error.message,
+    });
+  }
+};
+
+// Controlador para aprobar un permiso
+exports.approvedPermission = async (req, res) => {
+  try {
+    const { permissionID } = req.params;
+    const { isApproved } = req.body;
+    const [results] = await db.query(
+      `
+      UPDATE permissionattendance_emp
+      SET isApproved = ?, updatedDate = ?, updatedBy = ?
+      WHERE permissionID = ?
+    `,
+      [isApproved, ...camposAuditoriaUPDATE(req), permissionID]
+    );
+    if (results.affectedRows === 0) {
+      return res.status(500).json({
+        message: "Permiso no encontrado o ya está aprobado.",
+      });
+    }
+    res.json({message: "Permiso aprobado correctamente", results});
+  } catch (err) {
+    console.error("Error approving permission:", err);
+    res.status(500).json({
+      message: "Error al aprobar el permiso",
+      error: err.message,
+    });
+  }
+}
+
+// Controlador para eliminar un permiso
+exports.deletePermission = async (req, res) => {
+  try {
+    const { permissionID } = req.params;
+    const [results] = await db.query(
+      `
+      DELETE FROM permissionattendance_emp
+      WHERE permissionID = ?
+    `,
+      [permissionID]
+    );
+    if (results.affectedRows === 0) {
+      return res.status(404).json({
+        message: "Permiso no encontrado.",
+      });
+    }
+    res.json({ message: "Permiso eliminado correctamente.", results });
+  } catch (err) {
+    console.error("Error deleting permission:", err);
+    res.status(500).json({
+      message: "Error al eliminar el permiso",
+      error: err.message,
     });
   }
 };

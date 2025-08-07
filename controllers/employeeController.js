@@ -66,6 +66,31 @@ exports.getEmployees = async (req, res) => {
   }
 };
 
+// Obtener todos los empleados activos
+exports.getEmployeesActives = async (req, res) => {
+  try {
+    const [employees] = await db.query(
+      `
+      SELECT
+          e.employeeID, e.codeEmployee, concat(firstName, " ", middleName, " ", lastName, " ", secondLastName) fullName
+        FROM employees_emp e
+              INNER JOIN division_emp di on di.divisionID = e.divisionID
+              INNER JOIN area_emp a on a.areaID = e.areaID
+              INNER JOIN department_emp dep on dep.departmentID = e.departmentID
+              INNER JOIN shifts_emp shi on shi.shiftID = e.shiftID
+              INNER JOIN jobs_emp j on j.jobID = e.jobID
+              where e.companyID = 1 AND e.isActive = 1
+              ORDER BY e.employeeID asc;
+      `
+    );
+
+    res.json(employees);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener datos de empleados" });
+  }
+};
+
 // Get para un solo empleado
 exports.getEmployeeByID = async (req, res) => {
   try {
@@ -657,7 +682,12 @@ exports.addChild = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.status(201).json({ childrenID: result.insertId, message: "Hijo creado correctamente" });
+    res
+      .status(201)
+      .json({
+        childrenID: result.insertId,
+        message: "Hijo creado correctamente",
+      });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el hijo" });
@@ -749,7 +779,12 @@ exports.addFamilyInfo = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.status(201).json({ familyInfoID: result.insertId, message: "Información familiar creada correctamente" });
+    res
+      .status(201)
+      .json({
+        familyInfoID: result.insertId,
+        message: "Información familiar creada correctamente",
+      });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear la información familiar" });
@@ -793,7 +828,9 @@ exports.updateFamilyInfo = async (req, res) => {
         req.params.familyInfoID,
       ]
     );
-    res.status(200).json({ message: "Información familiar actualizada correctamente" });
+    res
+      .status(200)
+      .json({ message: "Información familiar actualizada correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -858,7 +895,12 @@ exports.addEContact = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res.status(201).json({ econtactID: result.insertId, message: "Contacto de emergencia creado correctamente" });
+    res
+      .status(201)
+      .json({
+        econtactID: result.insertId,
+        message: "Contacto de emergencia creado correctamente",
+      });
   } catch (error) {
     console.error(error);
     res
@@ -908,7 +950,9 @@ exports.updateEContact = async (req, res) => {
         req.params.econtactID,
       ]
     );
-    res.status(200).json({ message: "Contacto de emergencia actualizado correctamente" });
+    res
+      .status(200)
+      .json({ message: "Contacto de emergencia actualizado correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -927,7 +971,9 @@ exports.deleteEContact = async (req, res) => {
     await db.query("DELETE FROM econtacts_emp WHERE econtactID = ?", [
       econtactID,
     ]);
-    res.status(200).json({ message: "Contacto de emergencia eliminado correctamente" });
+    res
+      .status(200)
+      .json({ message: "Contacto de emergencia eliminado correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -950,7 +996,12 @@ exports.addAuxRelative = async (req, res) => {
         ...camposAuditoriaADD(req),
       ]
     );
-    res.status(201).json({ auxRelativeID: result.insertId, message: "Familiar auxiliar creado correctamente" });
+    res
+      .status(201)
+      .json({
+        auxRelativeID: result.insertId,
+        message: "Familiar auxiliar creado correctamente",
+      });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el familiar auxiliar" });
@@ -1002,6 +1053,7 @@ exports.deleteAuxRelative = async (req, res) => {
     res.status(500).json({ message: "Error al eliminar el familiar auxiliar" });
   }
 };
+
 //Eliminar varios familiares auxiliares
 exports.deleteAuxRelativeByEmployee = async (req, res) => {
   const { employeeID } = req.params;
@@ -1012,7 +1064,9 @@ exports.deleteAuxRelativeByEmployee = async (req, res) => {
     await db.query("DELETE FROM auxrelative_emp WHERE newEmployee = ?", [
       employeeID,
     ]);
-    res.status(200).json({ message: "Familiares auxiliares eliminados correctamente" });
+    res
+      .status(200)
+      .json({ message: "Familiares auxiliares eliminados correctamente" });
   } catch (error) {
     console.error(error);
     res
@@ -1020,6 +1074,7 @@ exports.deleteAuxRelativeByEmployee = async (req, res) => {
       .json({ message: "Error al eliminar los familiares auxiliares" });
   }
 };
+
 ///// INFORMACION DE BENEFICIARIOS //////
 exports.addBeneficiaryInfo = async (req, res) => {
   const {

@@ -8,8 +8,11 @@ router.get('/', permissionController.getPermissionData);
 router.get('/allPermissions', permissionController.getAllPermissions);
 router.put('/paidPermission/:permissionID', permissionController.markPermissionAsPaid);
 
-// Ruta para autorizar un permiso
-router.post('/authorize', permissionController.authorizePermission);
+// Ruta para crear un permiso
+router.post('/', permissionController.createPermission);
+router.put('/approvedPermission/:permissionID', permissionController.approvedPermission);
+router.delete('/:permissionID', permissionController.deletePermission);
+
 
 
 module.exports = router;
