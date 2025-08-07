@@ -29,4 +29,7 @@ router.get('/user_menu_permission/:userID', userController.getUsersMenuPermissio
 //Permisos para pantallas
 router.get('/user_permission_screen/:userID', userController.getUsersPermissionScreen)
 
+//Traer los usuarios
+
+router.get("/employees",userController.getAllEmployees);
 module.exports = router;

@@ -99,8 +99,7 @@ exports.getAllUsers = async (req, res) => {
 
 exports.createuser = async (req, res) => {
   const {
-    firstName,
-    lastName,
+    employeeID,
     username,
     email,
     password,
@@ -111,8 +110,7 @@ exports.createuser = async (req, res) => {
   console.log("Datos recibidos:", req.body);
 
   if (
-    !firstName ||
-    !lastName ||
+    !employeeID ||
     !username ||
     !email ||
     !password ||
@@ -154,10 +152,9 @@ exports.createuser = async (req, res) => {
 
     // Insertar el nuevo usuario en la base de datos
     const [result] = await db.query(
-      "INSERT INTO users_us (firstName, lastName, username, email, passwordHash, userStatusID, passwordLastChanged, createdDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO users_us (employeeID, username, email, passwordHash, userStatusID, passwordLastChanged, createdDate) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
-        formatNamePart(firstName),
-        formatNamePart(lastName),
+        employeeID,
         username,
         email,
         hashedPassword,
@@ -205,7 +202,7 @@ exports.getUserById = async (req, res) => {
   try {
     const [user] = await db.query(
       `select 
-        u.userID, u.username, u.email, u.firstName, u.lastName,
+        u.userID, u.username, u.email, u.employeeID,
         c.companyID, c.companyName
         from users_us u
         inner join usercompany_us uc on uc.userID = u.userID
@@ -249,7 +246,7 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUserById = async (req, res) => {
   const userID = req.params.userID;
-  const { firstName, lastName, email, companyID, permissions } = req.body;
+  const { employeeID, email, companyID, permissions } = req.body;
 
   try {
     // Verificar si el usuario existe
@@ -264,8 +261,8 @@ exports.updateUserById = async (req, res) => {
 
     // Actualizar el usuario
     await db.query(
-      `UPDATE users_us SET firstName = ?, lastName = ?, email = ?, updatedDate = ? WHERE userID = ?`,
-      [firstName, lastName, email, new Date(), userID]
+      `UPDATE users_us SET employeeID = ?, email = ?, updatedDate = ? WHERE userID = ?`,
+      [employeeID, email, new Date(), userID]
     );
 
     // Actualizar la compañía del usuario
@@ -300,6 +297,28 @@ exports.updateUserById = async (req, res) => {
     res.status(500).json({ message: "Error interno del servidor." });
   }
 };
+
+exports.getAllEmployees = async (req, res) => {
+  try {
+    const [employees] = await db.query(`
+      SELECT 
+        employeeID,
+        codeEmployee,
+        firstName,
+        middleName,
+        lastName,
+        secondLastName
+      FROM employees_emp
+      ORDER BY employeeID ASC;
+    `);
+
+    res.status(200).json({ employees });
+  } catch (error) {
+    console.error("Error al obtener empleados:", error);
+    res.status(500).json({ message: "Error interno al obtener empleados." });
+  }
+};
+
 
 exports.createProfileByUser = async (req, res) => {
   const { userID, permissions } = req.body;
