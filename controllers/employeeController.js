@@ -91,6 +91,37 @@ exports.getEmployeesActives = async (req, res) => {
   }
 };
 
+// Obtener todos los empleados presente en piso
+exports.getPresentEmployees = async (req, res) => {
+  try {
+    const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
+    const [employees] = await db.query(
+      `
+      SELECT DISTINCT
+         e.employeeID,
+         CONCAT(e.employeeID, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName) AS fullName
+      FROM
+          employees_emp e
+          INNER JOIN h_attendance_emp a ON e.employeeID = a.employeeID
+      WHERE
+          a.date = ?
+          AND NOT EXISTS (
+              SELECT 1
+              FROM dispatching_emp d
+              WHERE d.employeeID = e.employeeID
+              AND d.date = ?
+          )
+      `,
+      [currentDate, currentDate]
+    );
+
+    res.json(employees);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error al obtener datos de empleados" });
+  }
+};
+
 // Get para un solo empleado
 exports.getEmployeeByID = async (req, res) => {
   try {
@@ -682,12 +713,10 @@ exports.addChild = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res
-      .status(201)
-      .json({
-        childrenID: result.insertId,
-        message: "Hijo creado correctamente",
-      });
+    res.status(201).json({
+      childrenID: result.insertId,
+      message: "Hijo creado correctamente",
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el hijo" });
@@ -779,12 +808,10 @@ exports.addFamilyInfo = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res
-      .status(201)
-      .json({
-        familyInfoID: result.insertId,
-        message: "Información familiar creada correctamente",
-      });
+    res.status(201).json({
+      familyInfoID: result.insertId,
+      message: "Información familiar creada correctamente",
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear la información familiar" });
@@ -895,12 +922,10 @@ exports.addEContact = async (req, res) => {
         camposAuditoriaADD(req),
       ]
     );
-    res
-      .status(201)
-      .json({
-        econtactID: result.insertId,
-        message: "Contacto de emergencia creado correctamente",
-      });
+    res.status(201).json({
+      econtactID: result.insertId,
+      message: "Contacto de emergencia creado correctamente",
+    });
   } catch (error) {
     console.error(error);
     res
@@ -996,12 +1021,10 @@ exports.addAuxRelative = async (req, res) => {
         ...camposAuditoriaADD(req),
       ]
     );
-    res
-      .status(201)
-      .json({
-        auxRelativeID: result.insertId,
-        message: "Familiar auxiliar creado correctamente",
-      });
+    res.status(201).json({
+      auxRelativeID: result.insertId,
+      message: "Familiar auxiliar creado correctamente",
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error al crear el familiar auxiliar" });
