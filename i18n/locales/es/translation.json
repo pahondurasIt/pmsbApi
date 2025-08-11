@@ -1,0 +1,22 @@
+{
+    "employeenotfound": "Empleado no encontrado. Verifica el ID.",
+    "employeeidrequired": "El ID del empleado es requerido.",
+    "employeeisInactive": "El empleado está inactivo. No puede registrar marcaje",
+    "shiftemplooyeenotfound": "No se encontro información del turno para este empleado.",
+    "couldNotUpdateNightShiftExitRecord": "No se pudo actualizar el registro de asistencia para salida de turno de noche.",
+    "nightshiftsuccess": "Salida de turno de noche registrada exitosamente",
+    "workdayfortoday": "Ya has finalizado tu jornada laboral para hoy (Salida o Despacho registrado). No puedes realizar más marcajes.",
+    "despatchingout": "No puedes marcar despacho mientras estás fuera con permiso. Registra tu regreso primero.",
+    "permissionEntryOutsideShiftWindow": "No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno",
+    "couldnotregister": "No se pudo actualizar el registro de permiso para regreso",
+    "returnentry": "Entrada de regreso con permiso registrada exitosamente",
+    "returnpermission": "Debes registrar tu regreso del permiso antes de realizar cualquier otro marcaje.",
+    "cannotexituntil": "No puedes registrar la salida con permiso hasta las",
+    "notexitpermissionregister": "No se pudo actualizar el registro de permiso para salida:",
+    "entrySuccess": "Entrada registrada exitosamente",
+    "permissionExitRegistered": "Salida con permiso registrada exitosamente",
+    "unknownerror": "Error desconocido",
+    "notExitBefore": "No se puede registrar salida antes de las ",
+    "password_updated": "Constraseña actualizada correctamente",
+    "password_update_error": "Error al actualizar la contraseña"
+}

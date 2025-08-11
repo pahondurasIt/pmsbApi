@@ -1,0 +1,22 @@
+{
+  "employeenotfound": "Employee not found. Please verify the ID.",
+  "employeeidrequired": "Employee ID is required.",
+  "employeeisInactive": "The employee is inactive. They cannot clock in.",
+  "shiftemplooyeenotfound": "No shift information was found for this employee.",
+  "couldNotUpdateNightShiftExitRecord": "The attendance record for the night shift could not be updated.",
+  "nightshiftsuccess": "Night shift attendance successfully recorded.",
+  "workdayfortoday": "You have finished your workday for today (Check-out or Registered dispatch). You cannot make any more clockings.",
+  "despatchingout": "You can't clock in while you're out on leave. Register your return first.",
+  "permissionEntryOutsideShiftWindow": "You cannot check in with permission outside of extended shift hours.",
+  "couldnotregister": "Could not update return permit record",
+  "returnentry": "Return entry with permit successfully registered",
+  "returnpermission": "You must register your return from the permit before making any other markings.",
+  "cannotexituntil": "You cannot check out with permission until",
+  "notexitpermissionregister": "The exit permit record could not be updated:",
+  "entrySuccess": "Entry registered successfully",
+  "permissionExitRegistered": "Exit with permission successfully registered",
+  "unknownerror": "Unknown Error",
+  "notExitBefore": "You cannot check out before",
+  "password_updated": "Password updated successfully",
+  "password_update_error": "Error updating password"
+}

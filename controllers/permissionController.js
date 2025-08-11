@@ -11,9 +11,10 @@ const { printPermissionTicket } = require("./thermalPrinterController");
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 
-// Extender dayjs con plugins de UTC y Timezone
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
 // Función para obtener tipos de permisos y lista de empleados que marcaron hoy
 exports.getPermissionData = async (req, res) => {
   try {
@@ -56,8 +57,7 @@ exports.getPermissionData = async (req, res) => {
     //       ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
     //     )
     //   `
-    // );
-
+    // )
     res.json({
       permissions: permissionResults,
     });

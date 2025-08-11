@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const { camposAuditoriaADD } = require("../helpers/columnasAuditoria");
 const bcrypt = require("bcrypt"); // Necesitas instalar: npm install bcrypt
+const { t } = require("../i18n/translate");
 const { formatNamePart } = require("../helpers/formateador");
 
 exports.getUsuarios = (req, res) => {
@@ -447,7 +448,7 @@ exports.createModule = async (req, res) => {
   try {
     const { moduleName } = req.body;
     console.log("Datos recibidos para crear módulo:", req.body);
-    
+
 
     if (!moduleName) {
       return res.status(400).json({ message: 'Faltan datos obligatorios' });
@@ -508,9 +509,10 @@ exports.getActiveUsers = async (req, res) => {
   }
 };
 
-
+//prueba
 exports.adminChangePassword = async (req, res) => {
   const { userID, newPassword } = req.body;
+  const language = "en";
 
   if (!userID || !newPassword) {
     return res.status(400).json({ message: "Faltan datos requeridos" });
@@ -523,22 +525,21 @@ exports.adminChangePassword = async (req, res) => {
       `UPDATE users_us SET passwordHash = ?, passwordLastChanged = NOW(), updatedDate = NOW() WHERE userID = ?`,
       [hashedPassword, userID]
     );
-
-    res.status(200).json({ message: "Contraseña actualizada correctamente" });
+   
+    return res.status(200).json({ message: t("password_updated", language) });
   } catch (error) {
-    console.error("Error al cambiar contraseña:", error);
-    res.status(500).json({ message: "Error al actualizar la contraseña" });
+    return res.status(500).json({ message: t("password_update_error", language) });
   }
 };
 
 exports.getUsersMenuPermission = async (req, res) => {
   const userID = req.params.userID;
 
-  if(!userID){
+  if (!userID) {
     return res.status(400).json({ message: "Se requiere el ID de usuario" });
   }
 
-  try{
+  try {
     const query = `
     SELECT DISTINCT
                 m.moduleID,
@@ -562,19 +563,19 @@ exports.getUsersMenuPermission = async (req, res) => {
                 m.moduleName, s.screenName;
     `
     const [rows] = await db.query(query, [userID]);
- 
-        res.status(200).json(rows);
 
-  }catch(error){
+    res.status(200).json(rows);
+
+  } catch (error) {
     console.error('Error al obtener permisos:', error);
-     res.status(500).json({ message: 'Error interno del servidor al obtener permisos.' });
+    res.status(500).json({ message: 'Error interno del servidor al obtener permisos.' });
   }
 }
 
 exports.getUsersPermissionScreen = async (req, res) => {
- try {
-   
-    const { userID} = req.params;
+  try {
+
+    const { userID } = req.params;
 
     if (!userID) {
       return res.status(400).json({ message: 'Falta el ID del usuario.' });
@@ -600,7 +601,7 @@ exports.getUsersPermissionScreen = async (req, res) => {
     res.status(200).json({ permissions });
 
   } catch (error) {
-   
+
     console.error('Error al obtener permisos de usuario:', error);
     res.status(500).json({ message: 'Error interno del servidor al procesar la solicitud.' });
   }

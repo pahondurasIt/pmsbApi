@@ -7,6 +7,7 @@ const isoWeek = require("dayjs/plugin/isoWeek"); // Plugin para manejar semanas 
 const { io } = require("../app"); // Importar la instancia de Socket.IO
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 const { printPermissionTicket } = require("./thermalPrinterController");
+const { t } = require("../i18n/translate");
 
 // Extender dayjs con los plugins de UTC, Timezone e ISO Week
 dayjs.extend(utc);
@@ -451,6 +452,8 @@ async function registerDispatchingInternal(
 exports.registerAttendance = async (req, res) => {
   let employeeRecords = [];
   let shiftRecords = [];
+  const language = "en";
+
   try {
     const { employeeID, operationMode } = req.body;
     if (!employeeID) {
@@ -478,9 +481,8 @@ exports.registerAttendance = async (req, res) => {
     const employee = employeeRecords[0];
 
     if (employee.isActive === 0) {
-      const employeeNameInactive = `${employee.firstName}${
-        employee.middleName ? " " + employee.middleName : ""
-      } ${employee.lastName}`;
+      const employeeNameInactive = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
+        } ${employee.lastName}`;
       const photoUrlInactive = employee.photoUrl || "";
       return res.status(400).json({
         message: "El empleado está inactivo. No puede registrar marcaje.",
@@ -490,9 +492,8 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
-    const employeeName = `${employee.firstName}${
-      employee.middleName ? " " + employee.middleName : ""
-    } ${employee.lastName}`;
+    const employeeName = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
+      } ${employee.lastName}`;
     const photoUrl = employee.photoUrl || "";
     const shiftID = employee.shiftID;
 
@@ -627,8 +628,8 @@ exports.registerAttendance = async (req, res) => {
             message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime
               .subtract(1, "hour")
               .format("h:mm A")} - ${shiftEndTime
-              .add(1, "hour")
-              .format("h:mm A")}).`,
+                .add(1, "hour")
+                .format("h:mm A")}).`,
             employeeName,
             photoUrl,
           });
@@ -640,7 +641,7 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para regreso: " +
-              (updateResult.error || "Error desconocido")
+            (updateResult.error || "Error desconocido")
           );
         }
         // Emitir el registro completo
@@ -801,7 +802,7 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para salida: " +
-              (updateResult.error || "Error desconocido")
+            (updateResult.error || "Error desconocido")
           );
         }
         registrationType = "permission_exit";
@@ -836,9 +837,7 @@ exports.registerAttendance = async (req, res) => {
         } else if (isCurrentRecordOpen) {
           // Si hay un registro abierto pero aún no es hora de una salida regular
           return res.status(400).json({
-            message: `No se puede registrar salida antes de las ${shiftEndTimeReal.format(
-              "h:mm A"
-            )}.`,
+            message: t("notExitBefore", language) + " " + shiftEndTimeReal.format("h:mm A") + ".",
             employeeName,
             photoUrl,
           });
@@ -892,13 +891,12 @@ exports.registerAttendance = async (req, res) => {
     const employeeInfoForError =
       employeeRecords && employeeRecords.length > 0
         ? {
-            employeeName: `${employeeRecords[0].firstName}${
-              employeeRecords[0].middleName
-                ? " " + employeeRecords[0].middleName
-                : ""
+          employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName
+            ? " " + employeeRecords[0].middleName
+            : ""
             } ${employeeRecords[0].lastName}`,
-            photoUrl: employeeRecords[0].photoUrl || "",
-          }
+          photoUrl: employeeRecords[0].photoUrl || "",
+        }
         : {};
     res.status(500).json({
       message: "Error interno del servidor al registrar la asistencia.",
