@@ -6,6 +6,7 @@ const permissionController = require('../controllers/permissionController');
 router.get('/', permissionController.getPermissionData);
 // Ruta para todos los permisos
 router.get('/allPermissions', permissionController.getAllPermissions);
+router.get('/permissionsWithoutApproval', permissionController.getPermissionsWithoutApproval);
 router.put('/paidPermission/:permissionID', permissionController.markPermissionAsPaid);
 
 // Ruta para crear un permiso

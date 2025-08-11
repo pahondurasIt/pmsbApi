@@ -76,7 +76,7 @@ exports.getAllPermissions = async (req, res) => {
     const [permissionResults] = await db.query(`
      SELECT 
         CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
-        ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment,
+        ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment, e.photoUrl,
         e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
         pa.exitPermission, pa.entryPermission, pa.isApproved, pa.isPaid, pa.status
@@ -88,6 +88,37 @@ exports.getAllPermissions = async (req, res) => {
       where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
       .add(1, "day")
       .format("YYYY-MM-DD")}'
+      ORDER BY pa.permissionID desc;
+    `);
+    res.json(permissionResults);
+  } catch (err) {
+    console.error("Error fetching all permissions:", err);
+    res.status(500).json({
+      message: "Error al cargar todos los permisos",
+      error: err.message,
+    });
+  }
+};
+
+// Función para obtener permisos sin aprobación
+exports.getPermissionsWithoutApproval = async (req, res) => {
+  try {
+    const [permissionResults] = await db.query(`
+     SELECT 
+        CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
+        ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment, pa.request, e.photoUrl,
+        e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
+        pa.date, pa.exitTimePermission, pa.entryTimePermission,
+        pa.exitPermission, pa.entryPermission, pa.isApproved, pa.isPaid, pa.status
+      FROM
+      permissionattendance_emp pa
+              INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
+              INNER JOIN employees_emp e on e.employeeID = pa.employeeID
+              INNER JOIN jobs_emp j on e.jobID = j.jobID
+      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
+      .add(1, "day")
+      .format("YYYY-MM-DD")}'
+      and !isApproved
       ORDER BY pa.permissionID desc;
     `);
     res.json(permissionResults);
@@ -136,6 +167,7 @@ exports.createPermission = async (req, res) => {
       permissionType,
       date,
       comment,
+      request,
       exitTimePermission,
       entryTimePermission,
       exitPermission,
@@ -176,14 +208,13 @@ exports.createPermission = async (req, res) => {
       });
     }
 
-    // Query actualizado para incluir los nuevos campos de hora y el campo usage
     const query = `
       INSERT INTO permissionattendance_emp (
         employeeID, permissionTypeID, date, exitTimePermission, entryTimePermission,
-        exitPermission, entryPermission, comment, isPaid, isApproved, approvedBy,
+        exitPermission, entryPermission, comment, request, isPaid, isApproved, approvedBy,
         status, createdDate, createdBy
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -199,8 +230,9 @@ exports.createPermission = async (req, res) => {
         ? dayjs(entryPermission).tz("America/Tegucigalpa").format("HH:mm")
         : null,
       isValidString(comment) ? comment : null,
-      isPaid || false,
-      isApproved || false,
+      request,
+      isPaid,
+      isApproved,
       null,
       status,
       camposAuditoriaADD(req),
@@ -212,7 +244,7 @@ exports.createPermission = async (req, res) => {
       const insertedId = result.insertId;
       res.status(201).json({
         success: true,
-        message: "Permiso autorizado y registrado correctamente.",
+        message: "Permiso registrado correctamente.",
         permissionId: insertedId,
       });
     } else {
@@ -255,10 +287,7 @@ exports.approvedPermission = async (req, res) => {
     // Si el permiso fue aprobado, imprimir el ticket automáticamente
     if (isApproved) {
       try {
-        await printPermissionTicket(permissionID, 'solicitud');
-        console.log(
-          `Ticket de permiso ${permissionID} enviado a impresión automáticamente.`
-        );
+        await printPermissionTicket(permissionID, "solicitud");
       } catch (printError) {
         console.error("Error al imprimir ticket automáticamente:", printError);
         // No fallar la aprobación si hay error en la impresión
@@ -273,7 +302,8 @@ exports.approvedPermission = async (req, res) => {
       error: err.message,
     });
   }
-}; // Controlador para eliminar un permiso
+};
+// Controlador para eliminar un permiso
 exports.deletePermission = async (req, res) => {
   try {
     const { permissionID } = req.params;

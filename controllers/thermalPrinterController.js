@@ -69,7 +69,7 @@ exports.printTicketRequestPermission = async (req, res) => {
       `
       		SELECT 
 				p.permissionID, p.exitTimePermission, p.entryTimePermission, p.exitPermission, p.entryPermission,
-                pt.permissionTypeID, pt.permissionTypeName, u.username,  
+                pt.permissionTypeID, pt.permissionTypeName, p.status, p.isApproved, p.request, u.username,  
                 concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy,  
                 concat(empAp.firstName,' ', empAp.middleName,' ',empAp.lastName) approvedBy,
                 j.jobName, concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName,
@@ -111,23 +111,23 @@ exports.printPermissionTicket = async (permissionID, op) => {
   try {
     const [dataPermission] = await db.query(
       `
-      	SELECT 
-				p.permissionID, p.exitTimePermission, p.entryTimePermission, p.exitPermission, p.entryPermission,
-                pt.permissionTypeID, pt.permissionTypeName, u.username,  
+              SELECT 
+                p.permissionID, p.exitTimePermission, p.entryTimePermission, p.exitPermission, p.entryPermission,
+                pt.permissionTypeID, pt.permissionTypeName, p.status, p.isApproved, p.request, u.username,  
                 concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy,  
                 concat(empAp.firstName,' ', empAp.middleName,' ',empAp.lastName) approvedBy,
                 j.jobName, concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName,
                 e.codeEmployee, ROUND(TIMESTAMPDIFF(Minute, p.exitTimePermission, p.entryTimePermission) /60, 2) AS hoursDifference            
-			from 
+			        from 
                 permissionattendance_emp p
-            inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
-            inner join users_us u on p.createdBy = u.userID
-            inner join employees_emp eu on u.employeeID = eu.employeeID
-            inner join users_us usAppr on p.approvedBy = usAppr.userID
-            inner join employees_emp empAp on empAp.employeeID = usAppr.employeeID
-            inner join employees_emp e on p.employeeID = e.employeeID
-            inner join jobs_emp j on j.jobID = e.jobID
-            where p.permissionID = ?;`,
+              inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
+              inner join users_us u on p.createdBy = u.userID
+              inner join employees_emp eu on u.employeeID = eu.employeeID
+              inner join users_us usAppr on p.approvedBy = usAppr.userID
+              inner join employees_emp empAp on empAp.employeeID = usAppr.employeeID
+              inner join employees_emp e on p.employeeID = e.employeeID
+              inner join jobs_emp j on j.jobID = e.jobID
+              where p.permissionID = ?;`,
       [permissionID]
     );
 
