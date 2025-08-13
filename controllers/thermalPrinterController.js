@@ -140,11 +140,11 @@ exports.printPermissionTicket = async (permissionID, op) => {
       [permissionID]
     );
 
+    console.log(printerClients.length);
+    
     if (printerClients.length === 0) {
-      res.status(500).json({
-        success: false,
+      return res.status(500).json({
         message: "No hay impresoras locales conectadas.",
-        error: error.message,
       });
     }
     if (op === "solicitud") {

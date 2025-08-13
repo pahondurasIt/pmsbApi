@@ -12,8 +12,6 @@ const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 const ExcelJS = require("exceljs");
 
-
-
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -100,7 +98,11 @@ exports.getAllPermissions = async (req, res) => {
           FROM h_attendance_emp
           GROUP BY employeeID, date
         ) att ON pa.date = att.date AND pa.employeeID = att.employeeID
-      WHERE pa.date BETWEEN '${dayjs().subtract(30, 'day').format("YYYY-MM-DD")}' AND '${dayjs().add(1, 'day').format("YYYY-MM-DD")}'
+      WHERE pa.date BETWEEN '${dayjs()
+        .subtract(30, "day")
+        .format("YYYY-MM-DD")}' AND '${dayjs()
+      .add(1, "month")
+      .format("YYYY-MM-DD")}'
       ORDER BY pa.permissionID DESC;
     `);
     res.json(permissionResults);
@@ -113,7 +115,7 @@ exports.getAllPermissions = async (req, res) => {
   }
 };
 
-//Funcion para exportar permisos 
+//Funcion para exportar permisos
 exports.exportPermissionsToExcel = async (req, res) => {
   try {
     const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
@@ -156,71 +158,105 @@ exports.exportPermissionsToExcel = async (req, res) => {
     const [results] = await db.query(query);
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Permisos');
+    const worksheet = workbook.addWorksheet("Permisos");
 
     worksheet.columns = [
-      { header: 'Ítem', key: 'item', width: 8 }, // correlativo
-      { header: 'Empleado', key: 'employeeName', width: 30 },
-      { header: 'Entrada Asistencia', key: 'attendanceEntry', width: 18 },
-      { header: 'Salida Permiso', key: 'exitPermission', width: 15 },
-      { header: 'Entrada Permiso', key: 'entryPermission', width: 15 },
-      { header: 'Tipo de Permiso', key: 'permissionTypeName', width: 20 },
-      { header: 'Estado', key: 'status', width: 10 },
-      { header: 'Aprobado', key: 'isApproved', width: 12 },
-      { header: 'Solicitud', key: 'request', width: 12 },
-      { header: 'Creado Por', key: 'createdBy', width: 25 },
-      { header: 'Aprobado Por', key: 'approvedBy', width: 25 },
-      { header: 'Puesto', key: 'jobName', width: 20 },
-      { header: 'Horas Diferencia', key: 'hoursDifference', width: 15 },
-      { header: 'Fecha Asistencia', key: 'attendance', width: 15 }
+      { header: "Ítem", key: "item", width: 8 }, // correlativo
+      { header: "Empleado", key: "employeeName", width: 30 },
+      { header: "Entrada Asistencia", key: "attendanceEntry", width: 18 },
+      { header: "Salida Permiso", key: "exitPermission", width: 15 },
+      { header: "Entrada Permiso", key: "entryPermission", width: 15 },
+      { header: "Tipo de Permiso", key: "permissionTypeName", width: 20 },
+      { header: "Estado", key: "status", width: 10 },
+      { header: "Aprobado", key: "isApproved", width: 12 },
+      { header: "Solicitud", key: "request", width: 12 },
+      { header: "Creado Por", key: "createdBy", width: 25 },
+      { header: "Aprobado Por", key: "approvedBy", width: 25 },
+      { header: "Puesto", key: "jobName", width: 20 },
+      { header: "Horas Diferencia", key: "hoursDifference", width: 15 },
+      { header: "Fecha Asistencia", key: "attendance", width: 15 },
     ];
 
     worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '366092' } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      cell.font = { bold: true, color: { argb: "FFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "366092" },
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
     });
 
     results.forEach((row, index) => {
       const excelRow = worksheet.addRow({
         item: index + 1, // Aquí creamos el correlativo
         employeeName: row.employeeName,
-        attendanceEntry: row.attendanceEntry ? formatTime(row.attendanceEntry) : '-',
-        exitPermission: row.exitPermission ? formatTime(row.exitPermission) : '-',
-        entryPermission: row.entryPermission ? formatTime(row.entryPermission) : '-',
+        attendanceEntry: row.attendanceEntry
+          ? formatTime(row.attendanceEntry)
+          : "-",
+        exitPermission: row.exitPermission
+          ? formatTime(row.exitPermission)
+          : "-",
+        entryPermission: row.entryPermission
+          ? formatTime(row.entryPermission)
+          : "-",
         permissionTypeName: row.permissionTypeName,
-        status: row.status === 1 ? 'Activo' : 'Inactivo',
-        isApproved: row.isApproved ? 'Sí' : 'No',
-        request: row.request ? 'Solicitado' : 'Diferido',
+        status: row.status === 1 ? "Activo" : "Inactivo",
+        isApproved: row.isApproved ? "Sí" : "No",
+        request: row.request ? "Solicitado" : "Diferido",
         createdBy: row.createdBy,
         approvedBy: row.approvedBy,
         jobName: row.jobName,
-        hoursDifference: row.hoursDifference !== null ? row.hoursDifference : '-',
-        attendance: row.attendance ? formatDate(row.attendance) : '-'
+        hoursDifference:
+          row.hoursDifference !== null ? row.hoursDifference : "-",
+        attendance: row.attendance ? formatDate(row.attendance) : "-",
       });
 
       excelRow.eachCell((cell) => {
-        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-        cell.alignment = { vertical: 'middle' };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.alignment = { vertical: "middle" };
       });
 
       if (index % 2 === 0) {
         excelRow.eachCell((cell) => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F9FA' } };
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "F8F9FA" },
+          };
         });
       }
     });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=permisos_${currentDate}.xlsx`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=permisos_${currentDate}.xlsx`
+    );
 
     await workbook.xlsx.write(res);
     res.end();
-
   } catch (error) {
-    console.error('Error al exportar permisos:', error);
-    res.status(500).json({ success: false, message: 'Error interno del servidor al exportar permisos', error: error.message });
+    console.error("Error al exportar permisos:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor al exportar permisos",
+      error: error.message,
+    });
   }
 };
 
@@ -234,16 +270,17 @@ exports.getEditPermission = async (req, res) => {
     if (!permissionID || !field || !newTime) {
       return res.status(400).json({
         success: false,
-        message: 'Datos incompletos: permissionID, field y newTime son requeridos.'
+        message:
+          "Datos incompletos: permissionID, field y newTime son requeridos.",
       });
     }
 
     // Solo permitir actualizar estas dos columnas
-    const allowedFields = ['exitPermission', 'entryPermission'];
+    const allowedFields = ["exitPermission", "entryPermission"];
     if (!allowedFields.includes(field)) {
       return res.status(400).json({
         success: false,
-        message: 'Campo no permitido.'
+        message: "Campo no permitido.",
       });
     }
 
@@ -258,54 +295,53 @@ exports.getEditPermission = async (req, res) => {
     if (result.affectedRows > 0) {
       return res.json({
         success: true,
-        message: `${field} actualizado correctamente.`
+        message: `${field} actualizado correctamente.`,
       });
     } else {
       return res.status(404).json({
         success: false,
-        message: 'No se encontró el permiso con ese ID.'
+        message: "No se encontró el permiso con ese ID.",
       });
     }
-
-    
   } catch (error) {
-    console.error('Error al actualizar permiso:', error);
+    console.error("Error al actualizar permiso:", error);
     return res.status(500).json({
       success: false,
-      message: 'Error al actualizar el permiso.',
-      error: error.message
+      message: "Error al actualizar el permiso.",
+      error: error.message,
     });
   }
 };
 
-
 // Función auxiliar para formatear tiempo con AM/PM
 function formatTime(timeString) {
-  if (!timeString || timeString === 'Invalid Date') return '-';
+  if (!timeString || timeString === "Invalid Date") return "-";
 
   try {
     const date = new Date(`1970-01-01T${timeString}`);
-    return date.toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    }).toUpperCase(); // Convertimos todo a mayúscula
+    return date
+      .toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+      .toUpperCase(); // Convertimos todo a mayúscula
   } catch (error) {
-    return '-';
+    return "-";
   }
 }
 
 // Función auxiliar para formatear fecha
 function formatDate(dateString) {
-  if (!dateString) return '-';
+  if (!dateString) return "-";
 
   try {
     const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
+    return date.toLocaleDateString("es-ES", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
     });
   } catch (error) {
     return dateString;
@@ -315,15 +351,6 @@ function formatDate(dateString) {
 // Función para obtener permisos sin aprobación
 exports.getPermissionsWithoutApproval = async (req, res) => {
   try {
-    const [permissionDetails] = await db.query(
-      "SELECT * FROM pmsdev.permissiontype_emp;"
-    );
-
-    let add = dayjs()
-      .add(permissionDetails[0].time * 60, "minutes")
-      .format("YYYY-MM-DD hh:mm:ss");
-    console.log(add);
-
     const [permissionResults] = await db.query(`
      SELECT 
         CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
@@ -336,9 +363,6 @@ exports.getPermissionsWithoutApproval = async (req, res) => {
               INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
               INNER JOIN employees_emp e on e.employeeID = pa.employeeID
               INNER JOIN jobs_emp j on e.jobID = j.jobID
-      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
-        .add(1, "day")
-        .format("YYYY-MM-DD")}'
       where pa.date between '${dayjs()
         .subtract(1, "month")
         .format("YYYY-MM-DD")}' and 
@@ -410,37 +434,45 @@ exports.createPermission = async (req, res) => {
       });
     }
 
-    // Revisar si tiene permiso activo y autorizado
-    const [permisoActivoAuth] = await db.query(
-      `
+    console.log(dayjs(date).format("YYYY-MM-DD"));
+
+    if (request) {
+      // Revisar si tiene permiso activo y autorizado
+      const [permisoActivoAuth] = await db.query(
+        `
         SELECT * FROM permissionattendance_emp pa
-        where pa.date = DATE(NOW()) and status and isApproved and pa.employeeID = ?;
+        where pa.date = '${dayjs(date).format(
+          "YYYY-MM-DD"
+        )}' and status and isApproved and pa.employeeID = ?;
         `,
-      [employeeID]
-    );
+        [employeeID]
+      );
 
-    if (permisoActivoAuth.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Ya existe un permiso autorizado para este empleado.",
-      });
-    }
+      if (permisoActivoAuth.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Ya existe un permiso autorizado para este empleado.",
+        });
+      }
 
-    // Revisar si tiene permiso activo en uso
-    const [permissionInUsed] = await db.query(
-      `
+      // Revisar si tiene permiso activo en uso
+      const [permissionInUsed] = await db.query(
+        `
         SELECT * FROM permissionattendance_emp pa
-        where pa.date = DATE(NOW()) and pa.employeeID = ?
+        where pa.date = '${dayjs(date).format(
+          "YYYY-MM-DD"
+        )}' and pa.employeeID = ?
         and isnull(entryPermission) and !status and request;
         `,
-      [employeeID]
-    );
+        [employeeID]
+      );
 
-    if (permissionInUsed.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "El empleado tiene un permiso en uso.",
-      });
+      if (permissionInUsed.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "El empleado tiene un permiso en uso.",
+        });
+      }
     }
 
     const [attendanceResults] = await db.query(
@@ -515,7 +547,6 @@ exports.createPermission = async (req, res) => {
   }
 };
 
-
 // Controlador para aprobar un permiso
 exports.approvedPermission = async (req, res) => {
   try {
@@ -537,7 +568,7 @@ exports.approvedPermission = async (req, res) => {
         message: "Permiso no encontrado o ya está aprobado.",
       });
     }
-    let errorPrint = '';
+    let errorPrint = "";
     // Si el permiso fue aprobado, imprimir el ticket automáticamente
     if (isApproved) {
       await printPermissionTicket(permissionID, "solicitud").catch(
@@ -548,7 +579,13 @@ exports.approvedPermission = async (req, res) => {
       );
     }
 
-    res.json({ message: "Permiso aprobado correctamente", results, errorPrint });
+    console.log(errorPrint);
+
+    res.json({
+      message: "Permiso aprobado correctamente",
+      results,
+      errorPrint,
+    });
   } catch (err) {
     console.error("Error approving permission:", err);
     res.status(500).json({
