@@ -38,9 +38,11 @@ exports.printTicketPermission = async (req, res) => {
     );
 
     if (printerClients.length === 0) {
-      return res
-        .status(500)
-        .send({ error: "No hay impresoras locales conectadas." });
+      res.status(500).json({
+        success: false,
+        message: "No hay impresoras locales conectadas.",
+        error: error.message,
+      });
     }
 
     //Enviar el contenido a los clientes conectados
@@ -88,9 +90,11 @@ exports.printTicketRequestPermission = async (req, res) => {
     );
 
     if (printerClients.length === 0) {
-      return res
-        .status(500)
-        .send({ error: "No hay impresoras locales conectadas." });
+      res.status(500).json({
+        success: false,
+        message: "No hay impresoras locales conectadas.",
+        error: error.message,
+      });
     }
 
     //Enviar el contenido a los clientes conectados
@@ -111,32 +115,43 @@ exports.printPermissionTicket = async (permissionID, op) => {
   try {
     const [dataPermission] = await db.query(
       `
-              SELECT 
-                p.permissionID, p.exitTimePermission, p.entryTimePermission, p.exitPermission, p.entryPermission,
-                pt.permissionTypeID, pt.permissionTypeName, p.status, p.isApproved, p.request, u.username,  
+              SELECT DISTINCT
+                p.permissionID, p.exitPermission, p.entryPermission, p.date,
+                pt.permissionTypeName, p.status, p.isApproved, p.request, 
                 concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy,  
                 concat(empAp.firstName,' ', empAp.middleName,' ',empAp.lastName) approvedBy,
                 j.jobName, concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName,
-                e.codeEmployee, ROUND(TIMESTAMPDIFF(Minute, p.exitTimePermission, p.entryTimePermission) /60, 2) AS hoursDifference            
+                e.codeEmployee, att.date attendance, att.entryTime attendanceEntry
 			        from 
                 permissionattendance_emp p
-              inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
-              inner join users_us u on p.createdBy = u.userID
-              inner join employees_emp eu on u.employeeID = eu.employeeID
-              inner join users_us usAppr on p.approvedBy = usAppr.userID
-              inner join employees_emp empAp on empAp.employeeID = usAppr.employeeID
-              inner join employees_emp e on p.employeeID = e.employeeID
-              inner join jobs_emp j on j.jobID = e.jobID
+               	  inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
+                  inner join users_us u on p.createdBy = u.userID
+                  inner join employees_emp eu on u.employeeID = eu.employeeID
+                  left join users_us usAppr on p.approvedBy = usAppr.userID
+                  left join employees_emp empAp on empAp.employeeID = usAppr.employeeID
+                  inner join employees_emp e on p.employeeID = e.employeeID
+                  inner join jobs_emp j on j.jobID = e.jobID
+              left join (
+                SELECT employeeID, date, MIN(entryTime) AS entryTime
+                FROM h_attendance_emp
+                GROUP BY employeeID, date
+              ) att ON p.date = att.date AND p.employeeID = att.employeeID
               where p.permissionID = ?;`,
       [permissionID]
     );
 
     if (printerClients.length === 0) {
-      throw new Error("No hay impresoras locales conectadas.");
+      res.status(500).json({
+        success: false,
+        message: "No hay impresoras locales conectadas.",
+        error: error.message,
+      });
     }
     if (op === "solicitud") {
       printerClients.forEach((socket) => {
-        socket.emit("printRequestPermission", dataPermission);
+        dataPermission[0].request
+          ? socket.emit("printRequestPermission", dataPermission)
+          : socket.emit("printDiferidoPermission", dataPermission);
       });
     } else {
       printerClients.forEach((socket) => {

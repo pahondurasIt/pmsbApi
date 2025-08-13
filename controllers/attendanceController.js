@@ -141,19 +141,15 @@ async function updatePermissionRecordWithExit(permissionID, currentTime) {
       throw new Error("No se pudo actualizar el registro de permiso.");
     }
 
+    let errorPrint = "";
     if (result.affectedRows > 0) {
-      try {
-        await printPermissionTicket(permissionID, "salida");
-        console.log(
-          `Ticket de permiso ${permissionID} enviado a impresión automáticamente.`
-        );
-      } catch (printError) {
-        console.error("Error al imprimir ticket automáticamente:", printError);
-        // No fallar la aprobación si hay error en la impresión
-      }
+      await printPermissionTicket(permissionID, "salida").catch((printErr) => {
+        console.error("Error al imprimir ticket automáticamente:", printErr);
+        errorPrint = "No hay impresoras locales conectadas.";
+      });
     }
 
-    return { success: result.affectedRows > 0 };
+    return { success: result.affectedRows > 0, errorPrint };
   } catch (error) {
     console.error("Error al registrar salida con permiso:", error);
     return { success: false, error: error.message };
@@ -481,8 +477,9 @@ exports.registerAttendance = async (req, res) => {
     const employee = employeeRecords[0];
 
     if (employee.isActive === 0) {
-      const employeeNameInactive = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
-        } ${employee.lastName}`;
+      const employeeNameInactive = `${employee.firstName}${
+        employee.middleName ? " " + employee.middleName : ""
+      } ${employee.lastName}`;
       const photoUrlInactive = employee.photoUrl || "";
       return res.status(400).json({
         message: "El empleado está inactivo. No puede registrar marcaje.",
@@ -492,8 +489,9 @@ exports.registerAttendance = async (req, res) => {
       });
     }
 
-    const employeeName = `${employee.firstName}${employee.middleName ? " " + employee.middleName : ""
-      } ${employee.lastName}`;
+    const employeeName = `${employee.firstName}${
+      employee.middleName ? " " + employee.middleName : ""
+    } ${employee.lastName}`;
     const photoUrl = employee.photoUrl || "";
     const shiftID = employee.shiftID;
 
@@ -628,8 +626,8 @@ exports.registerAttendance = async (req, res) => {
             message: `No se puede registrar entrada de regreso con permiso fuera del horario extendido del turno (${shiftStartTime
               .subtract(1, "hour")
               .format("h:mm A")} - ${shiftEndTime
-                .add(1, "hour")
-                .format("h:mm A")}).`,
+              .add(1, "hour")
+              .format("h:mm A")}).`,
             employeeName,
             photoUrl,
           });
@@ -641,7 +639,7 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para regreso: " +
-            (updateResult.error || "Error desconocido")
+              (updateResult.error || "Error desconocido")
           );
         }
         // Emitir el registro completo
@@ -743,6 +741,7 @@ exports.registerAttendance = async (req, res) => {
 
     let registrationType = "";
     let responseMessage = "";
+    let errorPrint = "";
     let attendanceID = null;
     let isPermissionExit = false;
     let permissionExitTime = null;
@@ -802,11 +801,12 @@ exports.registerAttendance = async (req, res) => {
         if (!updateResult.success) {
           throw new Error(
             "No se pudo actualizar el registro de permiso para salida: " +
-            (updateResult.error || "Error desconocido")
+              (updateResult.error || "Error desconocido")
           );
         }
         registrationType = "permission_exit";
         responseMessage = "Salida con permiso registrada exitosamente";
+        errorPrint = updateResult.errorPrint;
         attendanceID = latestRecord.hattendanceID;
       } else {
         // Esta es la lógica principal para salidas regulares, incluyendo turnos nocturnos.
@@ -837,7 +837,11 @@ exports.registerAttendance = async (req, res) => {
         } else if (isCurrentRecordOpen) {
           // Si hay un registro abierto pero aún no es hora de una salida regular
           return res.status(400).json({
-            message: t("notExitBefore", language) + " " + shiftEndTimeReal.format("h:mm A") + ".",
+            message:
+              t("notExitBefore", language) +
+              " " +
+              shiftEndTimeReal.format("h:mm A") +
+              ".",
             employeeName,
             photoUrl,
           });
@@ -885,18 +889,20 @@ exports.registerAttendance = async (req, res) => {
       attendanceID,
       isPermissionExit: isPermissionExit,
       permissionExitTime: permissionExitTime,
+      errorPrint
     });
   } catch (error) {
     console.error("Error en registerAttendance:", error);
     const employeeInfoForError =
       employeeRecords && employeeRecords.length > 0
         ? {
-          employeeName: `${employeeRecords[0].firstName}${employeeRecords[0].middleName
-            ? " " + employeeRecords[0].middleName
-            : ""
+            employeeName: `${employeeRecords[0].firstName}${
+              employeeRecords[0].middleName
+                ? " " + employeeRecords[0].middleName
+                : ""
             } ${employeeRecords[0].lastName}`,
-          photoUrl: employeeRecords[0].photoUrl || "",
-        }
+            photoUrl: employeeRecords[0].photoUrl || "",
+          }
         : {};
     res.status(500).json({
       message: "Error interno del servidor al registrar la asistencia.",

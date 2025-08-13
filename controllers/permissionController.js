@@ -11,7 +11,6 @@ const { printPermissionTicket } = require("./thermalPrinterController");
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 
-
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
@@ -40,26 +39,27 @@ exports.getPermissionData = async (req, res) => {
     //   [currentDate, currentDate]
     // );
 
-    // let currentTime = dayjs().format("HH:mm:ss");
+    let currentTime = dayjs().format("HH:mm:ss");
 
-    // const [shiftDetail] = await db.query(
-    //   `
-    //     SELECT
-    //       s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
-    //     FROM detailsshift_emp ds
-    //     INNER JOIN shifts_emp s ON ds.shiftID = s.shiftID
-    //     WHERE s.companyID = 1
-    //       AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
-    //       AND (
-    //       (ds.startTime < ds.endTime AND '${currentTime}' BETWEEN ds.startTime AND ds.endTime)
-    //       OR
-    //       (ds.startTime > ds.endTime AND
-    //       ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
-    //     )
-    //   `
-    // )
+    const [shiftDetail] = await db.query(
+      `
+        SELECT
+          s.shiftID, ds.day, s.shiftName, ds.startTime, ds.endTime
+        FROM detailsshift_emp ds
+        INNER JOIN shifts_emp s ON ds.shiftID = s.shiftID
+        WHERE s.companyID = 1
+          AND ds.day = '${dayjs().locale("es").format("dddd").toUpperCase()}'
+          AND (
+          (ds.startTime < ds.endTime AND '${currentTime}' BETWEEN ds.startTime AND ds.endTime)
+          OR
+          (ds.startTime > ds.endTime AND
+          ('${currentTime}' >= ds.startTime OR '${currentTime}' <= ds.endTime))
+        )
+      `
+    );
     res.json({
       permissions: permissionResults,
+      shift: shiftDetail.length > 0 ? shiftDetail[0] : null,
     });
   } catch (err) {
     console.error("Error fetching permission data:", err);
@@ -103,11 +103,20 @@ exports.getAllPermissions = async (req, res) => {
 // Función para obtener permisos sin aprobación
 exports.getPermissionsWithoutApproval = async (req, res) => {
   try {
+    const [permissionDetails] = await db.query(
+      "SELECT * FROM pmsdev.permissiontype_emp;"
+    );
+
+    let add = dayjs()
+      .add(permissionDetails[0].time * 60, "minutes")
+      .format("YYYY-MM-DD hh:mm:ss");
+    console.log(add);
+
     const [permissionResults] = await db.query(`
      SELECT 
         CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
         ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment, pa.request, e.photoUrl,
-        e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
+        e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName, p.time,
         pa.date, pa.exitTimePermission, pa.entryTimePermission,
         pa.exitPermission, pa.entryPermission, pa.isApproved, pa.isPaid, pa.status
       FROM
@@ -115,9 +124,10 @@ exports.getPermissionsWithoutApproval = async (req, res) => {
               INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
               INNER JOIN employees_emp e on e.employeeID = pa.employeeID
               INNER JOIN jobs_emp j on e.jobID = j.jobID
-      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
-      .add(1, "day")
-      .format("YYYY-MM-DD")}'
+      where pa.date between '${dayjs()
+        .subtract(1, "month")
+        .format("YYYY-MM-DD")}' and 
+      '${dayjs().add(1, "month").format("YYYY-MM-DD")}'
       and !isApproved
       ORDER BY pa.permissionID desc;
     `);
@@ -164,12 +174,11 @@ exports.createPermission = async (req, res) => {
   try {
     const {
       employeeID,
-      permissionType,
+      permissionTypeID,
       date,
       comment,
       request,
       exitTimePermission,
-      entryTimePermission,
       exitPermission,
       entryPermission,
       isPaid,
@@ -178,51 +187,79 @@ exports.createPermission = async (req, res) => {
     } = req.body;
 
     // Validación actualizada para incluir los nuevos campos obligatorios
-    if (
-      !employeeID ||
-      !permissionType ||
-      !exitTimePermission ||
-      !entryTimePermission
-    ) {
+    if (!employeeID || !permissionTypeID) {
       return res.status(400).json({
         success: false,
         message:
-          "Datos incompletos. Se requiere ID de empleado, tipo de permiso, hora de salida y hora de entrada.",
+          "Datos incompletos. Se requiere ID de empleado y tipo de permiso.",
       });
     }
 
-    const [permissionResults] = await db.query(
+    // Revisar si tiene permiso activo y autorizado
+    const [permisoActivoAuth] = await db.query(
       `
         SELECT * FROM permissionattendance_emp pa
-        where pa.date = DATE(NOW()) and status
-        and pa.employeeID = ?;
+        where pa.date = DATE(NOW()) and status and isApproved and pa.employeeID = ?;
         `,
       [employeeID]
     );
 
-    if (permissionResults.length > 0) {
+    if (permisoActivoAuth.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Ya existe un permiso autorizado para este empleado.",
+      });
+    }
+
+    // Revisar si tiene permiso activo en uso
+    const [permissionInUsed] = await db.query(
+      `
+        SELECT * FROM permissionattendance_emp pa
+        where pa.date = DATE(NOW()) and pa.employeeID = ?
+        and isnull(entryPermission) and !status and request;
+        `,
+      [employeeID]
+    );
+
+    if (permissionInUsed.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "El empleado tiene un permiso en uso.",
+      });
+    }
+
+    const [attendanceResults] = await db.query(
+      `
+        select * from h_attendance_emp 
+        where date = DATE(now()) and employeeID = ? and entryTime;
+        `,
+      [employeeID]
+    );
+
+    if (attendanceResults.length === 0 && request) {
       return res.status(400).json({
         success: false,
         message:
-          "Ya existe un permiso pendiente de autorización para este empleado.",
+          "El empleado no ha registrado su asistencia hoy. No se puede crear el permiso.",
       });
     }
 
     const query = `
       INSERT INTO permissionattendance_emp (
-        employeeID, permissionTypeID, date, exitTimePermission, entryTimePermission,
+        employeeID, permissionTypeID, date, exitTimePermission,
         exitPermission, entryPermission, comment, request, isPaid, isApproved, approvedBy,
         status, createdDate, createdBy
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
       employeeID,
-      permissionType,
+      permissionTypeID,
       dayjs(date).tz("America/Tegucigalpa").format("YYYY-MM-DD"),
-      dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
-      dayjs(entryTimePermission).tz("America/Tegucigalpa").format("HH:mm"),
+      isValidString(exitTimePermission)
+        ? dayjs(exitTimePermission).tz("America/Tegucigalpa").format("HH:mm")
+        : null,
       isValidString(exitPermission)
         ? dayjs(exitPermission).tz("America/Tegucigalpa").format("HH:mm")
         : null,
@@ -267,6 +304,7 @@ exports.createPermission = async (req, res) => {
 exports.approvedPermission = async (req, res) => {
   try {
     const { permissionID } = req.params;
+
     const { isApproved } = req.body;
     const userID = getUserIdFromToken(req);
 
@@ -283,18 +321,18 @@ exports.approvedPermission = async (req, res) => {
         message: "Permiso no encontrado o ya está aprobado.",
       });
     }
-
+    let errorPrint = '';
     // Si el permiso fue aprobado, imprimir el ticket automáticamente
     if (isApproved) {
-      try {
-        await printPermissionTicket(permissionID, "solicitud");
-      } catch (printError) {
-        console.error("Error al imprimir ticket automáticamente:", printError);
-        // No fallar la aprobación si hay error en la impresión
-      }
+      await printPermissionTicket(permissionID, "solicitud").catch(
+        (printErr) => {
+          console.error("Error al imprimir ticket automáticamente:", printErr);
+          errorPrint = "No hay impresoras locales conectadas.";
+        }
+      );
     }
 
-    res.json({ message: "Permiso aprobado correctamente", results });
+    res.json({ message: "Permiso aprobado correctamente", results, errorPrint });
   } catch (err) {
     console.error("Error approving permission:", err);
     res.status(500).json({
