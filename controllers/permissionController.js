@@ -10,6 +10,9 @@ const { isValidString } = require("../helpers/validator");
 const { printPermissionTicket } = require("./thermalPrinterController");
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
+const ExcelJS = require("exceljs");
+
+
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -74,21 +77,31 @@ exports.getPermissionData = async (req, res) => {
 exports.getAllPermissions = async (req, res) => {
   try {
     const [permissionResults] = await db.query(`
-     SELECT 
-        CONCAT(e.codeEmployee, ' ~ ', e.firstName, ' ', COALESCE(e.middleName, ''),
-        ' ', e.lastName,  ' ', e.secondLastName) as fullName, comment, e.photoUrl,
-        e.employeeID, j.jobName, pa.permissionID, p.permissionTypeID, p.permissionTypeName,
-        pa.date, pa.exitTimePermission, pa.entryTimePermission,
-        pa.exitPermission, pa.entryPermission, pa.isApproved, pa.isPaid, pa.status
+      SELECT
+        pa.*,
+        CONCAT(e.codeEmployee, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName,  ' ', e.secondLastName) as fullName,
+        p.permissionTypeName,
+        j.jobName,
+        ua.username AS approvedByUsername,
+        CONCAT(e_aprobador.firstName, ' ', e_aprobador.lastName) AS approvedByFullName,
+        CONCAT(e_creador.firstName, ' ', e_creador.lastName) AS createdBy, 
+        att.entryTime AS attendanceEntry
       FROM
-      permissionattendance_emp pa
-              INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
-              INNER JOIN employees_emp e on e.employeeID = pa.employeeID
-              INNER JOIN jobs_emp j on e.jobID = j.jobID
-      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
-      .add(1, "day")
-      .format("YYYY-MM-DD")}'
-      ORDER BY pa.permissionID desc;
+        permissionattendance_emp pa
+        INNER JOIN permissiontype_emp p ON p.permissionTypeID = pa.permissionTypeID
+        INNER JOIN employees_emp e ON e.employeeID = pa.employeeID
+        INNER JOIN jobs_emp j ON e.jobID = j.jobID 
+        LEFT JOIN users_us ua ON ua.userID = pa.approvedBy
+        LEFT JOIN employees_emp e_aprobador ON e_aprobador.employeeID = ua.employeeID
+        LEFT JOIN users_us uc ON uc.userID = pa.createdBy 
+        LEFT JOIN employees_emp e_creador ON e_creador.employeeID = uc.employeeID 
+        LEFT JOIN (
+          SELECT employeeID, date, MIN(entryTime) AS entryTime
+          FROM h_attendance_emp
+          GROUP BY employeeID, date
+        ) att ON pa.date = att.date AND pa.employeeID = att.employeeID
+      WHERE pa.date BETWEEN '${dayjs().subtract(30, 'day').format("YYYY-MM-DD")}' AND '${dayjs().add(1, 'day').format("YYYY-MM-DD")}'
+      ORDER BY pa.permissionID DESC;
     `);
     res.json(permissionResults);
   } catch (err) {
@@ -99,6 +112,205 @@ exports.getAllPermissions = async (req, res) => {
     });
   }
 };
+
+//Funcion para exportar permisos 
+exports.exportPermissionsToExcel = async (req, res) => {
+  try {
+    const currentDate = dayjs().tz("America/Tegucigalpa").format("YYYY-MM-DD");
+
+    const query = `
+  SELECT
+    pa.permissionID,
+    CONCAT(e.codeEmployee, ' - ', e.firstName, ' ', COALESCE(e.middleName, ''), ' ', e.lastName, ' ', e.secondLastName) AS employeeName,
+    att.entryTime AS attendanceEntry,
+    pa.exitPermission, 
+    pa.entryPermission,
+    p.permissionTypeName,
+    pa.status,
+    pa.isApproved,
+    pa.request,
+    CONCAT(e_creador.firstName, ' ', COALESCE(e_creador.middleName, ''), ' ', e_creador.lastName) AS createdBy,
+    CONCAT(e_aprobador.firstName, ' ', COALESCE(e_aprobador.middleName, ''), ' ', e_aprobador.lastName) AS approvedBy,
+    j.jobName,
+    ROUND(TIMESTAMPDIFF(MINUTE, pa.exitPermission, pa.entryPermission) / 60, 2) AS hoursDifference,
+    pa.date AS attendance
+  FROM
+    permissionattendance_emp pa
+    INNER JOIN permissiontype_emp p ON p.permissionTypeID = pa.permissionTypeID
+    INNER JOIN employees_emp e ON e.employeeID = pa.employeeID
+    INNER JOIN jobs_emp j ON e.jobID = j.jobID
+    LEFT JOIN users_us ua ON ua.userID = pa.approvedBy
+    LEFT JOIN employees_emp e_aprobador ON e_aprobador.employeeID = ua.employeeID
+    LEFT JOIN users_us uc ON uc.userID = pa.createdBy
+    LEFT JOIN employees_emp e_creador ON e_creador.employeeID = uc.employeeID
+    LEFT JOIN (
+      SELECT employeeID, date, MIN(entryTime) AS entryTime
+      FROM h_attendance_emp
+      GROUP BY employeeID, date
+    ) att ON pa.date = att.date AND pa.employeeID = att.employeeID
+  WHERE pa.date BETWEEN '${dayjs().subtract(30, "day").format("YYYY-MM-DD")}'
+                    AND '${dayjs().add(1, "day").format("YYYY-MM-DD")}'
+  ORDER BY pa.permissionID DESC
+`;
+
+    const [results] = await db.query(query);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Permisos');
+
+    worksheet.columns = [
+      { header: 'Ítem', key: 'item', width: 8 }, // correlativo
+      { header: 'Empleado', key: 'employeeName', width: 30 },
+      { header: 'Entrada Asistencia', key: 'attendanceEntry', width: 18 },
+      { header: 'Salida Permiso', key: 'exitPermission', width: 15 },
+      { header: 'Entrada Permiso', key: 'entryPermission', width: 15 },
+      { header: 'Tipo de Permiso', key: 'permissionTypeName', width: 20 },
+      { header: 'Estado', key: 'status', width: 10 },
+      { header: 'Aprobado', key: 'isApproved', width: 12 },
+      { header: 'Solicitud', key: 'request', width: 12 },
+      { header: 'Creado Por', key: 'createdBy', width: 25 },
+      { header: 'Aprobado Por', key: 'approvedBy', width: 25 },
+      { header: 'Puesto', key: 'jobName', width: 20 },
+      { header: 'Horas Diferencia', key: 'hoursDifference', width: 15 },
+      { header: 'Fecha Asistencia', key: 'attendance', width: 15 }
+    ];
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '366092' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    });
+
+    results.forEach((row, index) => {
+      const excelRow = worksheet.addRow({
+        item: index + 1, // Aquí creamos el correlativo
+        employeeName: row.employeeName,
+        attendanceEntry: row.attendanceEntry ? formatTime(row.attendanceEntry) : '-',
+        exitPermission: row.exitPermission ? formatTime(row.exitPermission) : '-',
+        entryPermission: row.entryPermission ? formatTime(row.entryPermission) : '-',
+        permissionTypeName: row.permissionTypeName,
+        status: row.status === 1 ? 'Activo' : 'Inactivo',
+        isApproved: row.isApproved ? 'Sí' : 'No',
+        request: row.request ? 'Solicitado' : 'Diferido',
+        createdBy: row.createdBy,
+        approvedBy: row.approvedBy,
+        jobName: row.jobName,
+        hoursDifference: row.hoursDifference !== null ? row.hoursDifference : '-',
+        attendance: row.attendance ? formatDate(row.attendance) : '-'
+      });
+
+      excelRow.eachCell((cell) => {
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        cell.alignment = { vertical: 'middle' };
+      });
+
+      if (index % 2 === 0) {
+        excelRow.eachCell((cell) => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'F8F9FA' } };
+        });
+      }
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=permisos_${currentDate}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    console.error('Error al exportar permisos:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor al exportar permisos', error: error.message });
+  }
+};
+
+exports.getEditPermission = async (req, res) => {
+  try {
+    const { permissionID, field, newTime } = req.body;
+
+    console.log(req.body);
+
+    // Validaciones
+    if (!permissionID || !field || !newTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Datos incompletos: permissionID, field y newTime son requeridos.'
+      });
+    }
+
+    // Solo permitir actualizar estas dos columnas
+    const allowedFields = ['exitPermission', 'entryPermission'];
+    if (!allowedFields.includes(field)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Campo no permitido.'
+      });
+    }
+
+    // Ejecutar actualización
+    const [result] = await db.query(
+      `UPDATE permissionattendance_emp 
+       SET ${field} = ? 
+       WHERE permissionID = ?`,
+      [newTime, permissionID]
+    );
+
+    if (result.affectedRows > 0) {
+      return res.json({
+        success: true,
+        message: `${field} actualizado correctamente.`
+      });
+    } else {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró el permiso con ese ID.'
+      });
+    }
+
+    
+  } catch (error) {
+    console.error('Error al actualizar permiso:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error al actualizar el permiso.',
+      error: error.message
+    });
+  }
+};
+
+
+// Función auxiliar para formatear tiempo con AM/PM
+function formatTime(timeString) {
+  if (!timeString || timeString === 'Invalid Date') return '-';
+
+  try {
+    const date = new Date(`1970-01-01T${timeString}`);
+    return date.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).toUpperCase(); // Convertimos todo a mayúscula
+  } catch (error) {
+    return '-';
+  }
+}
+
+// Función auxiliar para formatear fecha
+function formatDate(dateString) {
+  if (!dateString) return '-';
+
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+  } catch (error) {
+    return dateString;
+  }
+}
 
 // Función para obtener permisos sin aprobación
 exports.getPermissionsWithoutApproval = async (req, res) => {
@@ -124,6 +336,9 @@ exports.getPermissionsWithoutApproval = async (req, res) => {
               INNER JOIN permissiontype_emp p on p.permissionTypeID = pa.permissionTypeID
               INNER JOIN employees_emp e on e.employeeID = pa.employeeID
               INNER JOIN jobs_emp j on e.jobID = j.jobID
+      where pa.date between '${dayjs().format("YYYY-MM-DD")}' and '${dayjs()
+        .add(1, "day")
+        .format("YYYY-MM-DD")}'
       where pa.date between '${dayjs()
         .subtract(1, "month")
         .format("YYYY-MM-DD")}' and 
@@ -299,6 +514,7 @@ exports.createPermission = async (req, res) => {
     });
   }
 };
+
 
 // Controlador para aprobar un permiso
 exports.approvedPermission = async (req, res) => {
