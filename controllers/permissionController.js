@@ -1,5 +1,7 @@
 const db = require("../config/db");
 const dayjs = require("dayjs");
+const customParseFormat = require('dayjs/plugin/customParseFormat');
+dayjs.extend(customParseFormat);
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
 const {
@@ -262,92 +264,53 @@ exports.exportPermissionsToExcel = async (req, res) => {
 
 exports.getEditPermission = async (req, res) => {
   try {
-    const { permissionID, field, newTime } = req.body;
+    const { permissionID, field } = req.body;
+    const { newTime } = req.body;
 
-    console.log(req.body);
-
-    // Validaciones
     if (!permissionID || !field || !newTime) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Datos incompletos: permissionID, field y newTime son requeridos.",
-      });
+      return res.status(400).json({ success: false, message: "Datos incompletos: permissionID, field y newTime son requeridos." });
     }
 
-    // Solo permitir actualizar estas dos columnas
     const allowedFields = ["exitPermission", "entryPermission"];
     if (!allowedFields.includes(field)) {
-      return res.status(400).json({
-        success: false,
-        message: "Campo no permitido.",
-      });
+      return res.status(400).json({ success: false, message: "Campo no permitido." });
     }
 
-    // Ejecutar actualización
+    const normalized = normalizeTimeToSQL(newTime);
+    if (!normalized) {
+      return res.status(400).json({ success: false, message: "Formato de hora inválido." });
+    }
+
     const [result] = await db.query(
-      `UPDATE permissionattendance_emp 
-       SET ${field} = ? 
-       WHERE permissionID = ?`,
-      [newTime, permissionID]
+      `UPDATE permissionattendance_emp SET ${field} = ? WHERE permissionID = ?`,
+      [normalized, permissionID]
     );
 
     if (result.affectedRows > 0) {
-      return res.json({
-        success: true,
-        message: `${field} actualizado correctamente.`,
-      });
+      return res.json({ success: true, message: `Cambio de hora realizado exitosamente.` });
     } else {
-      return res.status(404).json({
-        success: false,
-        message: "No se encontró el permiso con ese ID.",
-      });
+      return res.status(404).json({ success: false, message: "No se encontró el permiso con ese ID." });
     }
   } catch (error) {
     console.error("Error al actualizar permiso:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error al actualizar el permiso.",
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, message: "Error al actualizar el permiso.", error: error.message });
   }
 };
 
-// Función auxiliar para formatear tiempo con AM/PM
-function formatTime(timeString) {
-  if (!timeString || timeString === "Invalid Date") return "-";
 
-  try {
-    const date = new Date(`1970-01-01T${timeString}`);
-    return date
-      .toLocaleTimeString("es-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      })
-      .toUpperCase(); // Convertimos todo a mayúscula
-  } catch (error) {
-    return "-";
+function normalizeTimeToSQL(value) {
+  if (!value) return null;
+  // si ya viene como HH:mm:ss
+  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value;
+
+  // intenta parsear 'hh:mm a' o 'hh:mm:ss a'
+  const tryFormats = ['hh:mm a', 'hh:mm:ss a', 'HH:mm', 'HH:mm:ss'];
+  for (const f of tryFormats) {
+    const d = dayjs(value, f, true);
+    if (d.isValid()) return d.format('HH:mm:ss');
   }
+  return null; // inválido
 }
-
-// Función auxiliar para formatear fecha
-function formatDate(dateString) {
-  if (!dateString) return "-";
-
-  try {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  } catch (error) {
-    return dateString;
-  }
-}
-
 // Función para obtener permisos sin aprobación
 exports.getPermissionsWithoutApproval = async (req, res) => {
   try {
