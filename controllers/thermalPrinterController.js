@@ -116,8 +116,8 @@ exports.printPermissionTicket = async (permissionID, op) => {
     const [dataPermission] = await db.query(
       `
               SELECT DISTINCT
-                p.permissionID, p.exitPermission, p.entryPermission, p.date,
-                pt.permissionTypeName, p.status, p.isApproved, p.request, 
+                p.permissionID,p.exitTimePermission, p.exitPermission, p.entryPermission, p.date,
+                pt.permissionTypeName, p.status, p.isApproved, p.request, pt.time,
                 concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy,  
                 concat(empAp.firstName,' ', empAp.middleName,' ',empAp.lastName) approvedBy,
                 j.jobName, concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName,
@@ -125,8 +125,8 @@ exports.printPermissionTicket = async (permissionID, op) => {
 			        from 
                 permissionattendance_emp p
                	  inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
-                  inner join users_us u on p.createdBy = u.userID
-                  inner join employees_emp eu on u.employeeID = eu.employeeID
+                  left join users_us u on p.createdBy = u.userID
+                  left join employees_emp eu on u.employeeID = eu.employeeID
                   left join users_us usAppr on p.approvedBy = usAppr.userID
                   left join employees_emp empAp on empAp.employeeID = usAppr.employeeID
                   inner join employees_emp e on p.employeeID = e.employeeID
@@ -138,10 +138,7 @@ exports.printPermissionTicket = async (permissionID, op) => {
               ) att ON p.date = att.date AND p.employeeID = att.employeeID
               where p.permissionID = ?;`,
       [permissionID]
-    );
-
-    console.log(printerClients.length);
-    
+    );    
     if (printerClients.length === 0) {
       return res.status(500).json({
         message: "No hay impresoras locales conectadas.",

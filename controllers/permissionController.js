@@ -40,7 +40,7 @@ exports.getPermissionData = async (req, res) => {
     //   [currentDate, currentDate]
     // );
 
-    let currentTime = dayjs().format("HH:mm:ss");
+    let currentTime = dayjs().tz("America/Guatemala").format("HH:mm:ss");
 
     const [shiftDetail] = await db.query(
       `
@@ -578,8 +578,6 @@ exports.approvedPermission = async (req, res) => {
         }
       );
     }
-
-    console.log(errorPrint);
 
     res.json({
       message: "Permiso aprobado correctamente",
