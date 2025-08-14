@@ -264,8 +264,7 @@ exports.exportPermissionsToExcel = async (req, res) => {
 
 exports.getEditPermission = async (req, res) => {
   try {
-    const { permissionID, field } = req.body;
-    const { newTime } = req.body;
+    const { permissionID, field, newTime } = req.body;
 
     if (!permissionID || !field || !newTime) {
       return res.status(400).json({ success: false, message: "Datos incompletos: permissionID, field y newTime son requeridos." });
@@ -281,6 +280,28 @@ exports.getEditPermission = async (req, res) => {
       return res.status(400).json({ success: false, message: "Formato de hora inválido." });
     }
 
+    // --- Validación lógica: salida < entrada ---
+    const [rows] = await db.query(
+      `SELECT exitPermission, entryPermission FROM permissionattendance_emp WHERE permissionID = ?`,
+      [permissionID]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: "No se encontró el permiso con ese ID." });
+    }
+
+    const current = rows[0];
+    let exitPerm = field === "exitPermission" ? normalized : current.exitPermission;
+    let entryPerm = field === "entryPermission" ? normalized : current.entryPermission;
+
+    if (exitPerm && entryPerm && exitPerm > entryPerm) {
+      return res.status(400).json({
+        success: false,
+        message: "La hora de salida no puede ser mayor que la de entrada."
+      });
+    }
+
+    // Actualizar
     const [result] = await db.query(
       `UPDATE permissionattendance_emp SET ${field} = ? WHERE permissionID = ?`,
       [normalized, permissionID]
@@ -296,6 +317,7 @@ exports.getEditPermission = async (req, res) => {
     return res.status(500).json({ success: false, message: "Error al actualizar el permiso.", error: error.message });
   }
 };
+
 
 // Función auxiliar para formatear tiempo con AM/PM
 function formatTime(timeString) {
