@@ -8,8 +8,8 @@ router.post(
   thermalPrinterPermissions.printTicketPermission
 );
 router.post(
-  "/printTicketRequestPermission",
-  thermalPrinterPermissions.printTicketRequestPermission
+  "/printTicketPermission",
+  thermalPrinterPermissions.printTicketPermission
 );
 
 module.exports = router;
