@@ -334,16 +334,15 @@ function formatDate(dateString) {
 
 function normalizeTimeToSQL(value) {
   if (!value) return null;
-  // si ya viene como HH:mm:ss
+ 
   if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value;
 
-  // intenta parsear 'hh:mm a' o 'hh:mm:ss a'
   const tryFormats = ['hh:mm a', 'hh:mm:ss a', 'HH:mm', 'HH:mm:ss'];
   for (const f of tryFormats) {
     const d = dayjs(value, f, true);
     if (d.isValid()) return d.format('HH:mm:ss');
   }
-  return null; // inválido
+  return null; 
 }
 
 // Función para obtener permisos sin aprobación
