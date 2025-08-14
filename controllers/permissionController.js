@@ -297,6 +297,40 @@ exports.getEditPermission = async (req, res) => {
   }
 };
 
+// Función auxiliar para formatear tiempo con AM/PM
+function formatTime(timeString) {
+  if (!timeString || timeString === "Invalid Date") return "-";
+
+  try {
+    const date = new Date(`1970-01-01T${timeString}`);
+    return date
+      .toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+      .toUpperCase(); // Convertimos todo a mayúscula
+  } catch (error) {
+    return "-";
+  }
+}
+
+// Función auxiliar para formatear fecha
+function formatDate(dateString) {
+  if (!dateString) return "-";
+
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("es-ES", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  } catch (error) {
+    return dateString;
+  }
+}
 
 function normalizeTimeToSQL(value) {
   if (!value) return null;
@@ -311,6 +345,7 @@ function normalizeTimeToSQL(value) {
   }
   return null; // inválido
 }
+
 // Función para obtener permisos sin aprobación
 exports.getPermissionsWithoutApproval = async (req, res) => {
   try {
