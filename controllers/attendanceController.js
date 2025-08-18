@@ -444,6 +444,7 @@ async function registerDispatchingInternal(
   }
 }
 
+// manuel es chiki
 // Controlador registerAttendance modificado para manejar correctamente las salidas de turnos nocturnos
 exports.registerAttendance = async (req, res) => {
   let employeeRecords = [];
