@@ -448,7 +448,7 @@ async function registerDispatchingInternal(
 exports.registerAttendance = async (req, res) => {
   let employeeRecords = [];
   let shiftRecords = [];
-  const language = "en";
+  const language = "es";
 
   try {
     const { employeeID, operationMode } = req.body;

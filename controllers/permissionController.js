@@ -13,6 +13,7 @@ const { printPermissionTicket } = require("./thermalPrinterController");
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 const ExcelJS = require("exceljs");
+const { io } = require("../app");
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -103,8 +104,8 @@ exports.getAllPermissions = async (req, res) => {
       WHERE pa.date BETWEEN '${dayjs()
         .subtract(30, "day")
         .format("YYYY-MM-DD")}' AND '${dayjs()
-      .add(1, "month")
-      .format("YYYY-MM-DD")}'
+          .add(1, "month")
+          .format("YYYY-MM-DD")}'
       ORDER BY pa.permissionID DESC;
     `);
     res.json(permissionResults);
@@ -356,7 +357,7 @@ function formatDate(dateString) {
 
 function normalizeTimeToSQL(value) {
   if (!value) return null;
- 
+
   if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value;
 
   const tryFormats = ['hh:mm a', 'hh:mm:ss a', 'HH:mm', 'HH:mm:ss'];
@@ -364,7 +365,7 @@ function normalizeTimeToSQL(value) {
     const d = dayjs(value, f, true);
     if (d.isValid()) return d.format('HH:mm:ss');
   }
-  return null; 
+  return null;
 }
 
 // Función para obtener permisos sin aprobación
@@ -417,6 +418,11 @@ exports.markPermissionAsPaid = async (req, res) => {
         message: "Permiso no encontrado o ya está marcado como pagado.",
       });
     }
+
+    io.emit('permission:updated', { permissionID, field: 'isPaid' });
+
+    io.emit('actualizar_permisos_tabla');
+
     res.json(results);
   } catch (err) {
     console.error("Error fetching all permissions:", err);
@@ -545,6 +551,14 @@ exports.createPermission = async (req, res) => {
 
     if (result.affectedRows === 1) {
       const insertedId = result.insertId;
+
+      io.emit('permission:new', {
+        permissionID: insertedId,
+        type: request ? 'solicitado' : 'diferido'
+      });
+
+      io.emit('actualizar_permisos_tabla');
+
       res.status(201).json({
         success: true,
         message: "Permiso registrado correctamente.",
@@ -597,6 +611,10 @@ exports.approvedPermission = async (req, res) => {
         }
       );
     }
+
+    io.emit('permission:approved', { permissionID });
+
+    io.emit('actualizar_permisos_tabla');
 
     res.json({
       message: "Permiso aprobado correctamente",
