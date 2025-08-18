@@ -1,6 +1,6 @@
 const db = require("../config/db");
 const dayjs = require("dayjs");
-const customParseFormat = require('dayjs/plugin/customParseFormat');
+const customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(customParseFormat);
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
@@ -13,6 +13,7 @@ const { printPermissionTicket } = require("./thermalPrinterController");
 const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 require("dayjs/locale/es");
 const ExcelJS = require("exceljs");
+const enviarCorreo = require("../helpers/sendEmail");
 const { io } = require("../app");
 
 dayjs.extend(utc);
@@ -61,6 +62,7 @@ exports.getPermissionData = async (req, res) => {
         )
       `
     );
+
     res.json({
       permissions: permissionResults,
       shift: shiftDetail.length > 0 ? shiftDetail[0] : null,
@@ -268,17 +270,25 @@ exports.getEditPermission = async (req, res) => {
     const { permissionID, field, newTime } = req.body;
 
     if (!permissionID || !field || !newTime) {
-      return res.status(400).json({ success: false, message: "Datos incompletos: permissionID, field y newTime son requeridos." });
+      return res.status(400).json({
+        success: false,
+        message:
+          "Datos incompletos: permissionID, field y newTime son requeridos.",
+      });
     }
 
     const allowedFields = ["exitPermission", "entryPermission"];
     if (!allowedFields.includes(field)) {
-      return res.status(400).json({ success: false, message: "Campo no permitido." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Campo no permitido." });
     }
 
     const normalized = normalizeTimeToSQL(newTime);
     if (!normalized) {
-      return res.status(400).json({ success: false, message: "Formato de hora inválido." });
+      return res
+        .status(400)
+        .json({ success: false, message: "Formato de hora inválido." });
     }
 
     // --- Validación lógica: salida < entrada ---
@@ -288,17 +298,22 @@ exports.getEditPermission = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "No se encontró el permiso con ese ID." });
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró el permiso con ese ID.",
+      });
     }
 
     const current = rows[0];
-    let exitPerm = field === "exitPermission" ? normalized : current.exitPermission;
-    let entryPerm = field === "entryPermission" ? normalized : current.entryPermission;
+    let exitPerm =
+      field === "exitPermission" ? normalized : current.exitPermission;
+    let entryPerm =
+      field === "entryPermission" ? normalized : current.entryPermission;
 
     if (exitPerm && entryPerm && exitPerm > entryPerm) {
       return res.status(400).json({
         success: false,
-        message: "La hora de salida no puede ser mayor que la de entrada."
+        message: "La hora de salida no puede ser mayor que la de entrada.",
       });
     }
 
@@ -309,16 +324,25 @@ exports.getEditPermission = async (req, res) => {
     );
 
     if (result.affectedRows > 0) {
-      return res.json({ success: true, message: `Cambio de hora realizado exitosamente.` });
+      return res.json({
+        success: true,
+        message: `Cambio de hora realizado exitosamente.`,
+      });
     } else {
-      return res.status(404).json({ success: false, message: "No se encontró el permiso con ese ID." });
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró el permiso con ese ID.",
+      });
     }
   } catch (error) {
     console.error("Error al actualizar permiso:", error);
-    return res.status(500).json({ success: false, message: "Error al actualizar el permiso.", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Error al actualizar el permiso.",
+      error: error.message,
+    });
   }
 };
-
 
 // Función auxiliar para formatear tiempo con AM/PM
 function formatTime(timeString) {
@@ -360,10 +384,10 @@ function normalizeTimeToSQL(value) {
 
   if (/^\d{2}:\d{2}:\d{2}$/.test(value)) return value;
 
-  const tryFormats = ['hh:mm a', 'hh:mm:ss a', 'HH:mm', 'HH:mm:ss'];
+  const tryFormats = ["hh:mm a", "hh:mm:ss a", "HH:mm", "HH:mm:ss"];
   for (const f of tryFormats) {
     const d = dayjs(value, f, true);
-    if (d.isValid()) return d.format('HH:mm:ss');
+    if (d.isValid()) return d.format("HH:mm:ss");
   }
   return null;
 }
@@ -459,8 +483,6 @@ exports.createPermission = async (req, res) => {
       });
     }
 
-    console.log(dayjs(date).format("YYYY-MM-DD"));
-
     if (request) {
       // Revisar si tiene permiso activo y autorizado
       const [permisoActivoAuth] = await db.query(
@@ -550,6 +572,48 @@ exports.createPermission = async (req, res) => {
     const [result] = await db.query(query, values);
 
     if (result.affectedRows === 1) {
+      const [permissionData] = await db.query(
+        `
+       SELECT 
+        pt.permissionTypeName, p.date, p.comment,
+        concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy, e.codeEmployee,
+        concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName, j.jobName
+        from permissionattendance_emp p
+        inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
+        left join users_us u on p.createdBy = u.userID
+        left join employees_emp eu on u.employeeID = eu.employeeID
+        inner join employees_emp e on p.employeeID = e.employeeID
+        inner join jobs_emp j on j.jobID = e.jobID
+        where permissionID = ?;
+        `,
+        [result.insertId]
+      );
+
+      enviarCorreo(
+        "pleslysarahi@gmail.com",
+        "Permiso por autorizar",
+        `
+      <h2>PERMISO POR AUTORIZAR</h2>
+      <p>Se ha solicitado un permiso que requiere su autorización.</p>
+      <p>Detalles del permiso:</p>
+      <ul>
+        <li>Empleado: ${permissionData[0].employeeName} (${
+          permissionData[0].codeEmployee
+        })</li>
+        <li>Puesto: ${permissionData[0].jobName}</li>
+        <li>Tipo de permiso: ${permissionData[0].permissionTypeName}</li>
+        <li>Fecha: ${dayjs(permissionData[0].date).format("MMM D, YYYY")}</li>
+        <li>Comentario: ${
+          permissionData[0].comment
+            ? permissionData[0].comment
+            : "Sin comentario"
+        }</li>
+      </ul>
+      <br />
+      <a href="http://192.168.30.52:9002/permissionsSupervisor">Revisar Permiso</a>
+      <p>Por favor, revise y autorice el permiso a la brevedad.</p>
+      `
+      );
       const insertedId = result.insertId;
 
       io.emit('permission:new', {
@@ -562,19 +626,13 @@ exports.createPermission = async (req, res) => {
       res.status(201).json({
         success: true,
         message: "Permiso registrado correctamente.",
-        permissionId: insertedId,
       });
-    } else {
-      throw new Error(
-        "No se pudo guardar el registro del permiso en la base de datos."
-      );
     }
   } catch (error) {
     console.error("Error en authorizePermission:", error);
     res.status(500).json({
       success: false,
-      message:
-        "Ocurrió un error en el servidor al intentar autorizar el permiso.",
+      message: "Ocurrió un error en el servidor al intentar crear el permiso.",
       error: error.message,
     });
   }
