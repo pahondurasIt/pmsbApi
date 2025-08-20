@@ -28,6 +28,7 @@ const logdispatchingRoutes = require("./routes/logdispatching");
 const formAddTimeRoutes = require("./routes/formaddtime");
 const usuariosRoutes = require("./routes/usuario"); // Importar las rutas de usuarios
 const exportEmployeeRoute = require("./routes/exportemployee");
+const employeeSupervisor = require("./routes/employeeSupervisor");
 
 app.use(function (req, res, next) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -60,6 +61,7 @@ app.use("/api/logdispatching", logdispatchingRoutes);
 app.use("/api/formaddtime", formAddTimeRoutes);
 app.use("/api/usuarios", usuariosRoutes); // Usar las rutas de usuarios
 app.use("/api/exportemployee", exportEmployeeRoute);
+app.use("/api/employeeSupervisor", employeeSupervisor);
 
 process.on("uncaughtException", (err) => {
   console.error("Uncaught Exception:", err);

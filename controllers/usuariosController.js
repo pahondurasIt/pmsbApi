@@ -99,24 +99,10 @@ exports.getAllUsers = async (req, res) => {
 };
 
 exports.createuser = async (req, res) => {
-  const {
-    employeeID,
-    username,
-    email,
-    password,
-    companyID,
-    permissions,
-  } = req.body;
+  const { employeeID, username, email, password, companyID, permissions } =
+    req.body;
 
-  console.log("Datos recibidos:", req.body);
-
-  if (
-    !employeeID ||
-    !username ||
-    !email ||
-    !password ||
-    !companyID
-  ) {
+  if (!employeeID || !username || !password || !companyID) {
     return res
       .status(400)
       .json({ message: "Todos los campos son requeridos." });
@@ -135,14 +121,16 @@ exports.createuser = async (req, res) => {
         .json({ message: "El nombre de usuario ya existe." });
     }
 
-    // Verificar si el email ya existe
-    const [existingEmail] = await db.query(
-      "SELECT email FROM users_us WHERE email = ?",
-      [email]
-    );
+    if (email) {
+      // Verificar si el email ya existe
+      const [existingEmail] = await db.query(
+        "SELECT email FROM users_us WHERE email = ?",
+        [email]
+      );
 
-    if (existingEmail.length > 0) {
-      return res.status(409).json({ message: "El email ya existe." });
+      if (existingEmail.length > 0) {
+        return res.status(409).json({ message: "El email ya existe." });
+      }
     }
 
     // Hashear la contraseña
@@ -173,21 +161,19 @@ exports.createuser = async (req, res) => {
       [newUserID, companyID, currentDateTime]
     );
 
-    // Insertar el perfil por defecto para el nuevo usuario
-    if (permissions.length === 0) {
-      return res.status(400).json({ message: "No se proporcionaron permisos" });
-    }
-
-    // Crear un nuevo perfil para el usuario con el arreglo de permisos
-    for (const permission of permissions) {
-      await db.query(
-        `
+    if (permissions.length > 0) {
+      for (const permission of permissions) {
+        await db.query(
+          `
           INSERT INTO profilebyuser_us (userId, permissionScreenID, createdDate, createdBy)
           VALUES (?, ?, ?)
         `,
-        [newUserID, permission, camposAuditoriaADD(req)]
-      );
+          [newUserID, permission, camposAuditoriaADD(req)]
+        );
+      }
     }
+    // Crear un nuevo perfil para el usuario con el arreglo de permisos
+
     res
       .status(201)
       .json({ message: "Usuario creado exitosamente", userId: newUserID });
@@ -204,10 +190,12 @@ exports.getUserById = async (req, res) => {
     const [user] = await db.query(
       `select 
         u.userID, u.username, u.email, u.employeeID,
-        c.companyID, c.companyName
+        c.companyID, c.companyName, e.employeeID, e.codeEmployee, concat(e.firstName, " ", 
+        e.middleName, " ", e.lastName, " ", e.secondLastName) fullName
         from users_us u
         inner join usercompany_us uc on uc.userID = u.userID
         inner join companies_us c on c.companyID = uc.companyID
+        inner join employees_emp e on e.employeeID = u.employeeID
         where u.userID = ?`,
       [userID]
     );
@@ -277,19 +265,17 @@ exports.updateUserById = async (req, res) => {
     // Actualizar los permisos del usuario
     await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [userID]);
 
-    if (permissions.length === 0) {
-      return res.status(400).json({ message: "No se proporcionaron permisos" });
-    }
-
-    // Crear un nuevo perfil para el usuario con el arreglo de permisos
-    for (const permission of permissions) {
-      await db.query(
-        `
+    if (permissions.length > 0) {
+      // Crear un nuevo perfil para el usuario con el arreglo de permisos
+      for (const permission of permissions) {
+        await db.query(
+          `
           INSERT INTO profilebyuser_us (userId, permissionScreenID, createdDate, createdBy)
           VALUES (?, ?, ?)
         `,
-        [userID, permission, camposAuditoriaADD(req)]
-      );
+          [userID, permission, camposAuditoriaADD(req)]
+        );
+      }
     }
 
     res.status(200).json({ message: "Usuario actualizado exitosamente" });
@@ -320,7 +306,6 @@ exports.getAllEmployees = async (req, res) => {
   }
 };
 
-
 exports.createProfileByUser = async (req, res) => {
   const { userID, permissions } = req.body;
 
@@ -331,10 +316,6 @@ exports.createProfileByUser = async (req, res) => {
 
     // Eliminar los permisos existentes para el usuario
     await db.query(`DELETE FROM profilebyuser_us WHERE userId = ?`, [userID]);
-
-    if (permissions.length === 0) {
-      return res.status(400).json({ message: "No se proporcionaron permisos" });
-    }
 
     //Crear un nuevo perfil para el usuario con el arreglo de permisos
     for (const permission of permissions) {
@@ -397,7 +378,7 @@ exports.createPermission = async (req, res) => {
     const { permissionName, moduleID, screenID } = req.body;
 
     if (!permissionName || !moduleID || !screenID) {
-      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+      return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
     const query = `
@@ -407,40 +388,44 @@ exports.createPermission = async (req, res) => {
 
     await db.query(query, [permissionName, moduleID, screenID]);
 
-    res.status(201).json({ message: 'Permiso creado exitosamente' });
+    res.status(201).json({ message: "Permiso creado exitosamente" });
   } catch (error) {
-    console.error('Error al crear permiso:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("Error al crear permiso:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
-}
+};
 
 exports.createScreen = async (req, res) => {
   try {
     const { screenName, moduleID } = req.body;
 
     if (!screenName || !moduleID) {
-      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+      return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
 
     // Procesar valores
-    const cleanScreenName = screenName.replace(/\s+/g, '').toLowerCase(); // "Control Screen" => "controlscreen"
+    const cleanScreenName = screenName.replace(/\s+/g, "").toLowerCase(); // "Control Screen" => "controlscreen"
     const component = screenName
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitaliza cada palabra
-      .join(''); // "Control Screen" => "ControlScreen"
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()) // Capitaliza cada palabra
+      .join(""); // "Control Screen" => "ControlScreen"
 
     const query = `
       INSERT INTO screen_us (screenName, moduleID, path, component, createdDate)
       VALUES (?, ?, ?, ?, NOW())
     `;
 
-    await db.query(query, [cleanScreenName, moduleID, cleanScreenName, component]);
+    await db.query(query, [
+      cleanScreenName,
+      moduleID,
+      cleanScreenName,
+      component,
+    ]);
 
-    res.status(201).json({ message: 'Pantalla creada exitosamente' });
-
+    res.status(201).json({ message: "Pantalla creada exitosamente" });
   } catch (error) {
-    console.error('Error al crear pantalla:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("Error al crear pantalla:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 };
 
@@ -449,9 +434,8 @@ exports.createModule = async (req, res) => {
     const { moduleName } = req.body;
     console.log("Datos recibidos para crear módulo:", req.body);
 
-
     if (!moduleName) {
-      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+      return res.status(400).json({ message: "Faltan datos obligatorios" });
     }
     const query = `
       INSERT INTO module_us ( moduleName, createdDate)
@@ -460,12 +444,12 @@ exports.createModule = async (req, res) => {
 
     await db.query(query, [moduleName]);
 
-    res.status(201).json({ message: 'Módulo creado exitosamente' });
+    res.status(201).json({ message: "Módulo creado exitosamente" });
   } catch (error) {
-    console.error('Error al crear módulo:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("Error al crear módulo:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
-}
+};
 
 // Obtener permisos por pantalla
 exports.getScreensByPermission = async (req, res) => {
@@ -481,8 +465,8 @@ exports.getScreensByPermission = async (req, res) => {
 
     res.status(200).json(results);
   } catch (error) {
-    console.error('Error al obtener permisos:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    console.error("Error al obtener permisos:", error);
+    res.status(500).json({ message: "Error interno del servidor" });
   }
 };
 
@@ -525,10 +509,12 @@ exports.adminChangePassword = async (req, res) => {
       `UPDATE users_us SET passwordHash = ?, passwordLastChanged = NOW(), updatedDate = NOW() WHERE userID = ?`,
       [hashedPassword, userID]
     );
-   
+
     return res.status(200).json({ message: t("password_updated", language) });
   } catch (error) {
-    return res.status(500).json({ message: t("password_update_error", language) });
+    return res
+      .status(500)
+      .json({ message: t("password_update_error", language) });
   }
 };
 
@@ -561,24 +547,24 @@ exports.getUsersMenuPermission = async (req, res) => {
                 AND pbu.isActive = TRUE
             ORDER BY
                 m.moduleName, s.screenName;
-    `
+    `;
     const [rows] = await db.query(query, [userID]);
 
     res.status(200).json(rows);
-
   } catch (error) {
-    console.error('Error al obtener permisos:', error);
-    res.status(500).json({ message: 'Error interno del servidor al obtener permisos.' });
+    console.error("Error al obtener permisos:", error);
+    res
+      .status(500)
+      .json({ message: "Error interno del servidor al obtener permisos." });
   }
-}
+};
 
 exports.getUsersPermissionScreen = async (req, res) => {
   try {
-
     const { userID } = req.params;
 
     if (!userID) {
-      return res.status(400).json({ message: 'Falta el ID del usuario.' });
+      return res.status(400).json({ message: "Falta el ID del usuario." });
     }
 
     const query = `
@@ -596,17 +582,15 @@ exports.getUsersPermissionScreen = async (req, res) => {
 
     const [results] = await db.query(query, [userID]);
 
-    const permissions = results.map(row => row.permissionName);
+    const permissions = results.map((row) => row.permissionName);
 
     res.status(200).json({ permissions });
-
   } catch (error) {
-
-    console.error('Error al obtener permisos de usuario:', error);
-    res.status(500).json({ message: 'Error interno del servidor al procesar la solicitud.' });
+    console.error("Error al obtener permisos de usuario:", error);
+    res.status(500).json({
+      message: "Error interno del servidor al procesar la solicitud.",
+    });
   }
-}
-
+};
 
 // exports.getPantallas = async (req, res) => {};
-
