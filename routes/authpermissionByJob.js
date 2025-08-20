@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const employeeSupController = require('../controllers/employeeSupervisorController');
+const employeeSupController = require('../controllers/authpermissionByJobController');
 
 router.get('/', employeeSupController.getempSupervisor);
 router.post('/', employeeSupController.createLine);
