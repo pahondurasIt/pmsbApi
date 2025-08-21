@@ -106,8 +106,8 @@ exports.getAllPermissions = async (req, res) => {
       WHERE pa.date BETWEEN '${dayjs()
         .subtract(30, "day")
         .format("YYYY-MM-DD")}' AND '${dayjs()
-          .add(1, "month")
-          .format("YYYY-MM-DD")}'
+      .add(1, "month")
+      .format("YYYY-MM-DD")}'
       ORDER BY pa.permissionID DESC;
     `);
     res.json(permissionResults);
@@ -443,9 +443,9 @@ exports.markPermissionAsPaid = async (req, res) => {
       });
     }
 
-    io.emit('permission:updated', { permissionID, field: 'isPaid' });
+    io.emit("permission:updated", { permissionID, field: "isPaid" });
 
-    io.emit('actualizar_permisos_tabla');
+    io.emit("actualizar_permisos_tabla");
 
     res.json(results);
   } catch (err) {
@@ -473,6 +473,8 @@ exports.createPermission = async (req, res) => {
       isApproved,
       status,
     } = req.body;
+
+    const userID = getUserIdFromToken(req);
 
     // Validación actualizada para incluir los nuevos campos obligatorios
     if (!employeeID || !permissionTypeID) {
@@ -564,7 +566,7 @@ exports.createPermission = async (req, res) => {
       request,
       isPaid,
       isApproved,
-      null,
+      isApproved ? userID : null,
       status,
       camposAuditoriaADD(req),
     ];
@@ -574,32 +576,90 @@ exports.createPermission = async (req, res) => {
     if (result.affectedRows === 1) {
       const [permissionData] = await db.query(
         `
-       SELECT 
+       SELECT
         pt.permissionTypeName, p.date, p.comment,
-        concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy, e.codeEmployee,
-        concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName, j.jobName
+        concat(eu.firstName,' ', eu.middleName,' ',eu.lastName) createdBy, e.codeEmployee, e.managerID,
+        concat(e.firstName, ' ', e.middleName, ' ', e.lastName) employeeName, j.jobName,
+        um.email, um.approvePermission
         from permissionattendance_emp p
         inner join permissiontype_emp pt on p.permissionTypeID = pt.permissionTypeID
         left join users_us u on p.createdBy = u.userID
         left join employees_emp eu on u.employeeID = eu.employeeID
         inner join employees_emp e on p.employeeID = e.employeeID
         inner join jobs_emp j on j.jobID = e.jobID
+        left join users_us um on um.employeeID = e.managerID
         where permissionID = ?;
         `,
         [result.insertId]
       );
 
-      enviarCorreo(
-        "pleslysarahi@gmail.com",
-        "Permiso por autorizar",
+      const [userAuth] = await db.query(
         `
+        select userID,username, email, approvePermission from users_us u
+        where userID = ?;
+        `,
+        [userID]
+      );
+
+      if (userAuth.length === 0) {
+        console.log(
+          "No se encontró un usuario asociado al empleado para notificar."
+        );
+        res.status(404).json({
+          success: false,
+          message:
+            "No se encontró un usuario asociado al empleado para notificar.",
+        });
+      }
+
+      console.log(permissionData[0].email);
+      
+
+      if (userAuth[0].approvePermission) {
+        enviarCorreo(
+          permissionData[0].email,
+          "Creación de Permiso",
+          `
+        <h2>Creación de Permiso</h2>
+        <p>Se ha creado un nuevo permiso.</p>
+        <p>Detalles del permiso:</p>
+        <ul>
+          <li>Empleado: ${permissionData[0].employeeName} (${
+            permissionData[0].codeEmployee
+          })</li>
+          <li>Puesto: ${permissionData[0].jobName}</li>
+          <li>Tipo de permiso: ${permissionData[0].permissionTypeName}</li>
+          <li>Fecha: ${dayjs(permissionData[0].date).format("MMM D, YYYY")}</li>
+          <li>Comentario: ${
+            permissionData[0].comment
+              ? permissionData[0].comment
+              : "Sin comentario"
+          }</li>
+        </ul>
+      `
+        );
+
+        await printPermissionTicket(result.insertId, "solicitud").catch(
+          (printErr) => {
+            console.error(
+              "Error al imprimir ticket automáticamente:",
+              printErr
+            );
+            errorPrint = "No hay impresoras locales conectadas.";
+          }
+        );
+      } else {
+        enviarCorreo(
+          permissionData[0].email,
+          "Permiso por autorizar",
+          `
       <h2>PERMISO POR AUTORIZAR</h2>
       <p>Se ha solicitado un permiso que requiere su autorización.</p>
       <p>Detalles del permiso:</p>
       <ul>
         <li>Empleado: ${permissionData[0].employeeName} (${
-          permissionData[0].codeEmployee
-        })</li>
+            permissionData[0].codeEmployee
+          })</li>
         <li>Puesto: ${permissionData[0].jobName}</li>
         <li>Tipo de permiso: ${permissionData[0].permissionTypeName}</li>
         <li>Fecha: ${dayjs(permissionData[0].date).format("MMM D, YYYY")}</li>
@@ -613,15 +673,16 @@ exports.createPermission = async (req, res) => {
       <a href="http://192.168.30.52:9002/permissionsSupervisor">Revisar Permiso</a>
       <p>Por favor, revise y autorice el permiso a la brevedad.</p>
       `
-      );
+        );
+      }
       const insertedId = result.insertId;
 
-      io.emit('permission:new', {
+      io.emit("permission:new", {
         permissionID: insertedId,
-        type: request ? 'solicitado' : 'diferido'
+        type: request ? "solicitado" : "diferido",
       });
 
-      io.emit('actualizar_permisos_tabla');
+      io.emit("actualizar_permisos_tabla");
 
       res.status(201).json({
         success: true,
@@ -670,9 +731,9 @@ exports.approvedPermission = async (req, res) => {
       );
     }
 
-    io.emit('permission:approved', { permissionID });
+    io.emit("permission:approved", { permissionID });
 
-    io.emit('actualizar_permisos_tabla');
+    io.emit("actualizar_permisos_tabla");
 
     res.json({
       message: "Permiso aprobado correctamente",

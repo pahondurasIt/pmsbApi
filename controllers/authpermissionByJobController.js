@@ -3,6 +3,7 @@ const {
   camposAuditoriaADD,
   camposAuditoriaUPDATE,
 } = require("../helpers/columnasAuditoria");
+const getUserIdFromToken = require("../helpers/getUserIdFromToken");
 
 exports.getempSupervisor = async (req, res) => {
   try {
@@ -45,6 +46,53 @@ exports.getempSupervisor = async (req, res) => {
     res
       .status(500)
       .json({ message: "Error al obtener datos de los empleados" });
+  }
+};
+
+exports.getEmployeesByJob = async (req, res) => {
+  try {
+    const userID = req.params.userID;
+
+    const [employees] = await db.query(
+      `
+        SELECT 
+        auth.jobsID, e.codeEmployee, e.employeeID,
+        CONCAT(e.firstName,' ', e.middleName,' ',e.lastName ,' ', 
+        e.secondLastName, ' (', e.codeEmployee,')') AS fullName,
+        j.jobID, j.jobName
+        FROM authpermissionbyjob_emp auth
+        join employees_emp e ON FIND_IN_SET(e.jobID, auth.jobsID) > 0
+        inner join jobs_emp j on j.jobID = e.jobID
+        where supervisorID = ?
+        and e.isActive;
+      `,
+      [userID]
+    );
+
+    res.json(employees);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Error al obtener datos de los empleados" });
+  }
+};
+
+exports.getAuthorization = async (userID) => {
+  try {
+    const [authorize] = await db.query(
+      `
+          SELECT authorize FROM authpermissionbyjob_emp
+          where supervisorID = ?;
+      `,
+      [userID]
+    );
+
+    return {
+      authorize,
+    };
+  } catch (error) {
+    console.error(error);
   }
 };
 

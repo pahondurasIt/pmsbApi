@@ -2,6 +2,10 @@
 const bcrypt = require("bcrypt"); // Necesitas instalar: npm install bcrypt
 const jwt = require("jsonwebtoken"); // Necesitas instalar: npm install jsonwebtoken
 const db = require("../config/db"); // Ajusta la ruta a tu archivo de configuración de base datos
+const {
+  getEmployeesByJob,
+  getAuthorization,
+} = require("./authpermissionByJobController");
 
 // Se recomienda usar una variable de entorno para tu JWT_SECRET
 const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key"; // ¡CAMBIA ESTA CLAVE POR UNA MUY SEGURA!
@@ -159,15 +163,18 @@ exports.login = async (req, res) => {
     const permissionsArray = userPermissions.map(
       (permission) => permission.permissionName
     );
+
     res.status(200).json({
       message: "Inicio de sesión exitoso.",
       token,
       user: {
         id: user.userID,
         username: user.username,
+        employeeID: user.employeeID,
         role: user.role,
         status: user.statusName,
         associatedLocations: associatedLocations,
+        approvePermission: user.approvePermission,
       },
       permissions: permissionsArray,
       screens: userScreens,
@@ -280,23 +287,23 @@ exports.loginDespacho = async (req, res) => {
 };
 
 exports.getAllCompanies = async (req, res) => {
-   try {
-     const [rows] = await db.query(
-       `SELECT
+  try {
+    const [rows] = await db.query(
+      `SELECT
                  companyID,
                  companyName,
                  companyDescription
               FROM
                  companies_us`
-     );
+    );
 
-     if (rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ message: "No se encontraron compañías." });
-     }
+    }
 
-     res.status(200).json({ companies: rows });
-   } catch (error) {
-     console.error("Error al obtener compañías:", error);
+    res.status(200).json({ companies: rows });
+  } catch (error) {
+    console.error("Error al obtener compañías:", error);
     res.status(500).json({ message: "Error interno del servidor." });
   }
- };
+};
