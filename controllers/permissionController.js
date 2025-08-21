@@ -612,9 +612,6 @@ exports.createPermission = async (req, res) => {
         });
       }
 
-      console.log(permissionData[0].email);
-      
-
       if (userAuth[0].approvePermission) {
         enviarCorreo(
           permissionData[0].email,
@@ -622,6 +619,9 @@ exports.createPermission = async (req, res) => {
           `
         <h2>Creación de Permiso</h2>
         <p>Se ha creado un nuevo permiso.</p>
+        <p>Se ha creado un nuevo permiso.</p>
+        <p>Permiso creado por ${permissionData[0].createdBy}</p>
+        <br />
         <p>Detalles del permiso:</p>
         <ul>
           <li>Empleado: ${permissionData[0].employeeName} (${
@@ -655,6 +655,8 @@ exports.createPermission = async (req, res) => {
           `
       <h2>PERMISO POR AUTORIZAR</h2>
       <p>Se ha solicitado un permiso que requiere su autorización.</p>
+      <p>Permiso creado por ${permissionData[0].createdBy}</p>
+      <br />
       <p>Detalles del permiso:</p>
       <ul>
         <li>Empleado: ${permissionData[0].employeeName} (${
